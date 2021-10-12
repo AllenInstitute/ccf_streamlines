@@ -6,7 +6,7 @@ import logging
 from ccf_streamlines.coordinates import coordinates_to_voxels
 
 
-class Isocortex2dProjector(object):
+class Isocortex2dProjector:
     """ 2D projection of the common cortical framework
 
     Parameters
@@ -18,7 +18,7 @@ class Isocortex2dProjector(object):
         the top and bottom of cortex.
     closest_surface_voxel_reference_file : str, optional
         File path to a NRRD file containing information about the closest
-        streamlines to voxels within the isocortex.
+        streamlines for voxels within the isocortex.
     single_hemisphere : bool, default True
         Whether to collapse data into a single hemisphere visualization
 
@@ -33,21 +33,18 @@ class Isocortex2dProjector(object):
         closest_surface_voxel_reference_file=None,
         single_hemisphere=True,
     ):
-        self.projection_file = projection_file
-        self.surface_paths_file = surface_paths_file
-        self.closest_surface_voxel_reference_file = closest_surface_voxel_reference_file
         self.single_hemisphere = single_hemisphere
 
         # Load the projection information
         logging.info("Loading projection file")
-        with h5py.File(self.projection_file, "r") as proj_f:
+        with h5py.File(projection_file, "r") as proj_f:
             self.view_lookup = proj_f["view lookup"][:]
             self.view_size = proj_f.attrs["view size"][:]
             self.resolution = tuple(int(d.decode()) for d in proj_f.attrs["spacing"][:])
 
         # Load the surface path information
         logging.info("Loading surface path file")
-        with h5py.File(self.surface_paths_file, "r") as path_f:
+        with h5py.File(surface_paths_file, "r") as path_f:
             self.paths = path_f["paths"][:]
             self.volume_lookup = path_f["volume lookup"][:]
 
@@ -62,10 +59,10 @@ class Isocortex2dProjector(object):
         ]
 
         # Load the closest surface voxel reference file, if provided
-        if self.closest_surface_voxel_reference_file is not None:
+        if closest_surface_voxel_reference_file is not None:
             logging.info("Loading closest surface reference file")
             self.closest_surface_voxels, _ = nrrd.read(
-                self.closest_surface_voxel_reference_file)
+                closest_surface_voxel_reference_file)
 
 
     def project_volume(self, volume, kind="max"):
@@ -105,8 +102,8 @@ class Isocortex2dProjector(object):
                 projected_volume.flat[self.view_lookup[i, 0]] = np.min(
                     volume.flat[self.paths[i, :]])
         elif kind == "mean":
-            # Don't use paths with an index of zero (can't use the
-            # simplifying trick above
+            # Don't use paths parts with a value of zero (can't use the
+            # simplifying trick above)
             for i in range(self.paths.shape[0]):
                 path_ind = self.paths[i, :][self.paths[i, :] > 0]
                 projected_volume.flat[self.view_lookup[i, 0]] = np.mean(
@@ -152,8 +149,7 @@ class Isocortex2dProjector(object):
         projected_ind = np.zeros_like(matching_surface_voxel_ind)
         for i in range(projected_ind.shape[0]):
             projected_ind[i] = self.view_lookup[
-                self.view_lookup[:, 1] == matching_surface_voxel_ind[i],
-                0][0]
+                self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0][0]
 
         # Convert the flattened indices to 2D coordinates
         projected_coords = np.unravel_index(
