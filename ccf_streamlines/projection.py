@@ -1,9 +1,10 @@
 import numpy as np
+import pandas as pd
 import nrrd
 import h5py
 import logging
-
 from ccf_streamlines.coordinates import coordinates_to_voxels
+from skimage.measure import find_contours
 
 
 class Isocortex2dProjector:
@@ -158,3 +159,85 @@ class Isocortex2dProjector:
         )
         return projected_coords
 
+class BoundaryFinder:
+    """ Boundaries of cortical regions from 2D atlas projections
+
+    Parameters
+    ----------
+    projected_atlas_file : str
+        File path to a NRRD file containing the 2D projection of the atlas
+        labeled consistently with the `labels_file`.
+    labels_file : str
+        File path to a text file containing the region labels.
+    single_hemisphere : bool, default True
+        Whether to collapse data into a single hemisphere visualization
+
+    """
+
+    def __init__(self,
+        projected_atlas_file,
+        labels_file,
+        single_hemisphere=True,
+    ):
+        self.single_hemisphere = single_hemisphere
+
+        # Load the projection
+        logging.info("Loading projected atlas file")
+        self.proj_atlas, self.proj_atlas_meta = nrrd.read(
+            projected_atlas_file)
+
+        # Load the labels
+        self.labels_df =  pd.read_csv(
+            labels_file,
+            header=None,
+            sep="\s+",
+            index_col=0
+        )
+        self.labels_df.columns = ["r", "g", "b", "x0", "x1", "x2", "acronym"]
+
+    def region_boundaries(self, region_acronyms=None):
+        """Get projection coordinates of region boundaries.
+
+        Parameters
+        ----------
+        region_acronyms : list, optional
+            List of regions whose boundaries will be found. If None (default),
+            return all regions found in projection. Regions specified but not
+            present will have empty coordinate lists returned.
+
+        Returns
+        -------
+        boundaries : dict
+            Dictionary of region boundary coordinates with region acronyms
+            as keys.
+        """
+        if region_acronyms is None:
+            unique_entries = np.unique(self.proj_atlas).tolist()
+            unique_entries.remove(0) # 0 is defined as not a structure
+            region_acronyms = self.labels_df.loc[unique_entries, "acronym"].tolist()
+        else:
+            label_acronym_set = set(self.labels_df["acronym"].tolist())
+            for acronym in region_acronyms:
+                if acronym not in label_acronym_set:
+                    raise ValueError(f"Region acronym {acronym} does not have an index")
+
+        boundaries = {}
+        for acronym in region_acronyms:
+            ind = self.labels_df.index[self.labels_df["acronym"] == acronym][0]
+            region_raster = np.zeros_like(self.proj_atlas).astype(int)
+            region_raster[self.proj_atlas == ind] = 1
+            contours = find_contours(region_raster, level=0.5)
+
+            if len(contours) == 0:
+                # No contours found
+                boundaries[acronym] = np.array([])
+            elif len(contours) == 1:
+                boundaries[acronym] = contours[0]
+            else:
+                # Find the biggest contour
+                max_len = 0
+                for c in contours:
+                    if len(c) > max_len:
+                        boundaries[acronym] = c
+                        max_len = len(c)
+        return boundaries
