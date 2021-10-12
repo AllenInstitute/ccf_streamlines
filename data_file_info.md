@@ -78,8 +78,14 @@ closest_surface_voxel.nrrd
 cortical_areas.nrrd
 
 cortical_layers_10.h5
+- has keys for each layer
+- for each, has one row per path. three values - start distance, end distance, and thickness
 
 cortical_layers.nrrd
+- CCF-shaped
+- values include 667481440, 667481441, 667481445, 667481446, 667481449, 667481450 (as well as 0)
+- these are ontology set IDs (but no way to get their names directly?)
+-
 
 depth_from_surface.nrrd
 

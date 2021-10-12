@@ -5,6 +5,7 @@ import h5py
 import logging
 from ccf_streamlines.coordinates import coordinates_to_voxels
 from skimage.measure import find_contours
+from tqdm import tqdm
 
 
 class Isocortex2dProjector:
@@ -22,10 +23,6 @@ class Isocortex2dProjector:
         streamlines for voxels within the isocortex.
     single_hemisphere : bool, default True
         Whether to collapse data into a single hemisphere visualization
-
-    Attributes
-    ----------
-
     """
 
     def __init__(self,
@@ -93,19 +90,19 @@ class Isocortex2dProjector:
             # maximum projection, we set that to the minimum possible value
             # so that it won't be selected
             volume.flat[0] = np.iinfo(volume.dtype).min
-            for i in range(self.paths.shape[0]):
+            for i in tqdm(range(self.paths.shape[0])):
                 projected_volume.flat[self.view_lookup[i, 0]] = np.max(
                     volume.flat[self.paths[i, :]])
         elif kind == "min":
             # Same thing as above, just set to maximum instead of minimum
             volume.flat[0] = np.iinfo(volume.dtype).max
-            for i in range(self.paths.shape[0]):
+            for i in tqdm(range(self.paths.shape[0])):
                 projected_volume.flat[self.view_lookup[i, 0]] = np.min(
                     volume.flat[self.paths[i, :]])
         elif kind == "mean":
             # Don't use paths parts with a value of zero (can't use the
             # simplifying trick above)
-            for i in range(self.paths.shape[0]):
+            for i in tqdm(range(self.paths.shape[0])):
                 path_ind = self.paths[i, :][self.paths[i, :] > 0]
                 projected_volume.flat[self.view_lookup[i, 0]] = np.mean(
                     volume.flat[path_ind])
@@ -158,6 +155,229 @@ class Isocortex2dProjector:
             self.view_size
         )
         return projected_coords
+
+
+class Isocortex3dProjector(Isocortex2dProjector):
+    """ Flattened projection of the common cortical framework with thickness
+
+    Parameters
+    ----------
+    projection_file : str
+        File path to an HDF5 file containing the 2D projection information.
+    surface_paths_file : str
+        File path to an HDF5 file containing information about the paths between
+        the top and bottom of cortex.
+    thickness_type : {"unnormalized", "normalized_full", "normalized_layers"}
+        Type of thickness normalization. If 'unnormalized', the thickness
+        varies across the projection according to the length of the streamline.
+        If 'normalized_full', the thickness (between pia and white matter) is
+        consistent everywhere, but layer thicknesses can vary. If
+        'normalized_layers', layer thicknesses are consistent everywhere. Layers
+        that are not present in a particular region are left empty in the
+        projection.
+    layer_thicknesses : dict, optional
+        Default None. Dictionary of layer thicknesses. Only used if
+        `thickness_type` is `normalized_layers`.
+    streamline_layer_thickness_file : str, optional
+        Default None. File path to an HDF5 file containing information about
+        the layer thicknesses per streamline.
+    closest_surface_voxel_reference_file : str, optional
+        File path to a NRRD file containing information about the closest
+        streamlines for voxels within the isocortex.
+    single_hemisphere : bool, default True
+        Whether to collapse data into a single hemisphere visualization
+    """
+    ISOCORTEX_LAYER_KEYS = [
+        'Isocortex layer 1',
+        'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
+        'Isocortex layer 4',
+        'Isocortex layer 5',
+        'Isocortex layer 6a',
+        'Isocortex layer 6b'
+    ]
+
+    def __init__(self,
+        projection_file,
+        surface_paths_file,
+        thickness_type="unnormalized",
+        layer_thicknesses=None,
+        streamline_layer_thickness_file=None,
+        closest_surface_voxel_reference_file=None,
+        single_hemisphere=True,
+    ):
+        super().__init__(
+            projection_file,
+            surface_paths_file,
+            closest_surface_voxel_reference_file,
+            single_hemisphere
+        )
+
+        allowed_thickness_types = {"unnormalized", "normalized_full", "normalized_layers"}
+        if thickness_type not in allowed_thickness_types:
+            raise ValueError(f"{thickness_type} not in allowed values {allowed_thickness_types}")
+        self.thickness_type = thickness_type
+
+        self.layer_thicknesses = layer_thicknesses
+
+        if thickness_type is "normalized_layers":
+            if streamline_layer_thickness_file is None:
+                raise ValueError("`streamline_layer_thickness_file` cannot be None if `thickness_type` is `normalized_layers`")
+            if layer_thicknesses is None:
+                raise ValueError("`layer_thicknesses` cannot be None if `thickness_type` is `normalized_layers`")
+
+            self.path_layer_thickness = {}
+            with h5py.File(streamline_layer_thickness_file, "r") as f:
+                for k in self.ISOCORTEX_LAYER_KEYS:
+                    self.path_layer_thickness[k] = f[k][:]
+
+                    # Select and order paths to match the projection.
+                    self.path_layer_thickness[k] = self.path_layer_thickness[k][
+                        self.volume_lookup.flat[self.view_lookup[:, 1]], :]
+
+    def project_volume(self, volume):
+        """ Create a flattened slab view of the volume.
+
+        Parameters
+        ----------
+        volume : array
+            Input volume with size matching the lookup volume
+
+        Returns
+        -------
+        projected_volume : array
+            3D slab projection of input volume
+        """
+        if volume.shape != self.volume_lookup.shape:
+            raise ValueError(
+                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_lookup.shape}")
+
+        if self.thickness_type == "unnormalized":
+            return self._project_volume_unnormalized(volume)
+        elif self.thickness_type == "normalized_full":
+            return self._project_volume_normalized_full(volume)
+        elif self.thickness_type == "normalized_layers":
+            return self._project_volume_normalized_layers(volume)
+        else:
+            raise ValueError(f"Unknown thickness type {self.thickness_type}")
+
+    def _project_volume_unnormalized(self, volume):
+        """ Create a flattened slab view of the volume with thickness as in the volume.
+
+        Parameters
+        ----------
+        volume : array
+            Input volume with size matching the lookup volume
+
+        Returns
+        -------
+        projected_volume : array
+            3D slab projection of input volume
+        """
+        projected_volume = np.zeros(
+            tuple(self.view_size) + (self.paths.shape[1],),
+            dtype=volume.dtype)
+
+        for i in tqdm(range(self.paths.shape[0])):
+            # Get the coordinates for the path on the surface of the slab
+            r, c = np.unravel_index(self.view_lookup[i, 0], self.view_size)
+
+            # Fill in the thickness of the slab at that location from the volume
+            projected_volume[r, c, :] = volume.flat[self.paths[i, :]]
+        return projected_volume
+
+    def _project_volume_normalized_full(self, volume):
+        """ Create a flattened slab view of the volume with equal overall thickness.
+
+        Parameters
+        ----------
+        volume : array
+            Input volume with size matching the lookup volume
+
+        Returns
+        -------
+        projected_volume : array
+            3D slab projection of input volume
+        """
+        projected_volume = np.zeros(
+            tuple(self.view_size) + (self.paths.shape[1],),
+            dtype=volume.dtype)
+        full_thickness = self.paths.shape[1]
+
+        for i in tqdm(range(self.paths.shape[0])):
+            # Get the coordinates for the path on the surface of the slab
+            r, c = np.unravel_index(self.view_lookup[i, 0], self.view_size)
+
+            # Get the path data (dropping the zeros)
+            path_ind = self.paths[i, :]
+            path_ind = path_ind[path_ind > 0]
+
+            # Interpolate the path data to the full thickness
+            path_thickness = len(path_ind)
+            interp_vol = np.interp(
+                np.linspace(0, path_thickness, full_thickness),
+                range(path_thickness),
+                volume.flat[path_ind]
+            )
+
+            # Fill in the thickness of the slab at that location from the volume
+            projected_volume[r, c, :] = interp_vol
+        return projected_volume
+
+    def _project_volume_normalized_layers(self, volume):
+        """ Create a flattened slab view of the volume with equal-thickness layers.
+
+        Parameters
+        ----------
+        volume : array
+            Input volume with size matching the lookup volume
+
+        Returns
+        -------
+        projected_volume : array
+            3D slab projection of input volume
+        """
+        projected_volume = np.zeros(
+            tuple(self.view_size) + (self.paths.shape[1],),
+            dtype=volume.dtype)
+        full_thickness_voxels = self.paths.shape[1]
+        ref_full_thickness = np.sum(list(self.layer_thicknesses.values()))
+        ref_thickness_voxels = {k: int(np.round(full_thickness_voxels * t / ref_full_thickness))
+            for k, t in self.layer_thicknesses.items()}
+
+        for i in tqdm(range(self.paths.shape[0])):
+            # Get the path data (dropping the zeros)
+            path_ind = self.paths[i, :]
+            path_ind = path_ind[path_ind > 0]
+
+            # Create interpolation lookup
+            interp_list = []
+            path_thickness = 0
+            for k in self.ISOCORTEX_LAYER_KEYS:
+                pl_start, pl_end, pl_thick = self.path_layer_thickness[k][i, :]
+                if pl_start == 0 and pl_end == 0:
+                    # if layer not present in streamline, set to -1
+                    interp_list.append(-1 * np.ones(ref_thickness_voxels[k]))
+                else:
+                    path_thickness += pl_thick
+                    interp_list.append(
+                        np.linspace(pl_start, pl_end, ref_thickness_voxels[k])
+                    )
+            interp_vals = np.concatenate(interp_list)
+
+            # Interpolate the path data to the specified layer thicknesses
+            interp_vol = np.interp(
+                interp_vals,
+                np.linspace(0, path_thickness, len(path_ind)),
+                volume.flat[path_ind],
+                left=0 # set values of -1 to 0 (i.e. empty for layers not present)
+            )
+
+            # Get the coordinates for the path on the surface of the slab
+            r, c = np.unravel_index(self.view_lookup[i, 0], self.view_size)
+
+            # Fill in the thickness of the slab at that location from the volume
+            projected_volume[r, c, :] = interp_vol
+        return projected_volume
 
 class BoundaryFinder:
     """ Boundaries of cortical regions from 2D atlas projections
