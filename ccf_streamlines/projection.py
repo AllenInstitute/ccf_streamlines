@@ -81,8 +81,9 @@ class Isocortex2dProjector:
         ----------
         volume : array
             Input volume with size matching the lookup volume
-        kind : {'max', 'min', 'mean'}
-            Whether to create a minimum, maximum, or mean projection
+        kind : {'max', 'min', 'mean', 'average'}
+            Whether to create a minimum, maximum, or mean projection. 'average'
+            is equivalent to 'mean'.
 
         Returns
         -------
@@ -95,28 +96,31 @@ class Isocortex2dProjector:
 
         projected_volume = np.zeros(self.view_size, dtype=volume.dtype)
 
+        if np.issubdtype(volume.dtype, np.integer):
+            min_val = np.iinfo(volume.dtype).min
+            max_val = np.iinfo(volume.dtype).max
+        elif np.issubdtype(volume.dtype, np.floating):
+            min_val = np.finfo(volume.dtype).min
+            max_val = np.finfo(volume.dtype).max
+        else:
+            raise ValueError("volume must have either integer or float data type")
+
         if kind == "max":
             # The path specification assumes the first point in the volume is not a
             # valid data point and so should be ignored. Since we are doing a
             # maximum projection, we set that to the minimum possible value
             # so that it won't be selected
-            volume.flat[0] = np.iinfo(volume.dtype).min
-            for i in tqdm(range(self.paths.shape[0])):
-                projected_volume.flat[self.view_lookup[i, 0]] = np.max(
-                    volume.flat[self.paths[i, :]])
+            volume.flat[0] = min_val
+            projected_volume.flat[self.view_lookup[:, 0]] = volume.flat[self.paths].max(axis=1)
         elif kind == "min":
             # Same thing as above, just set to maximum instead of minimum
-            volume.flat[0] = np.iinfo(volume.dtype).max
-            for i in tqdm(range(self.paths.shape[0])):
-                projected_volume.flat[self.view_lookup[i, 0]] = np.min(
-                    volume.flat[self.paths[i, :]])
-        elif kind == "mean":
-            # Don't use paths parts with a value of zero (can't use the
-            # simplifying trick above)
-            for i in tqdm(range(self.paths.shape[0])):
-                path_ind = self.paths[i, :][self.paths[i, :] > 0]
-                projected_volume.flat[self.view_lookup[i, 0]] = np.mean(
-                    volume.flat[path_ind])
+            volume.flat[0] = max_val
+            projected_volume.flat[self.view_lookup[:, 0]] = volume.flat[self.paths].min(axis=1)
+        elif kind == "mean" or kind == "average":
+            projected_volume.flat[self.view_lookup[:, 0]] = np.nanmean(
+                np.where(self.paths > 0, volume.flat[self.paths], np.nan),
+                axis=1)
+
         return projected_volume
 
     def project_coordinates(self, coords, scale="voxels"):
