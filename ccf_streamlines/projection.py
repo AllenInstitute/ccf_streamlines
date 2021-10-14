@@ -330,28 +330,33 @@ class Isocortex3dProjector(Isocortex2dProjector):
                     self.path_layer_thickness[k] = self.path_layer_thickness[k][
                         self.volume_lookup.flat[self.view_lookup[:, 1]], :]
 
-    def project_volume(self, volume):
+    def project_volume(self, volume, thickness_type=None):
         """ Create a flattened slab view of the volume.
 
         Parameters
         ----------
         volume : array
             Input volume with size matching the lookup volume
+        thickness_type : {None, "unnormalized", "normalized_full", "normalized_layers"}, optional
+            Optional override of initial thickness type
 
         Returns
         -------
         projected_volume : array
             3D slab projection of input volume
         """
+        if thickness_type is None:
+            thickness_type = self.thickness_type
+
         if volume.shape != self.volume_lookup.shape:
             raise ValueError(
                 f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_lookup.shape}")
 
-        if self.thickness_type == "unnormalized":
+        if thickness_type == "unnormalized":
             return self._project_volume_unnormalized(volume)
-        elif self.thickness_type == "normalized_full":
+        elif thickness_type == "normalized_full":
             return self._project_volume_normalized_full(volume)
-        elif self.thickness_type == "normalized_layers":
+        elif thickness_type == "normalized_layers":
             return self._project_volume_normalized_layers(volume)
         else:
             raise ValueError(f"Unknown thickness type {self.thickness_type}")
@@ -485,7 +490,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
             for k, t in self.layer_thicknesses.items()}
         return ref_thickness_voxels
 
-    def project_coordinates(self, coords, scale="voxels"):
+    def project_coordinates(self, coords, scale="voxels", thickness_type=None):
         """ Project set of coordinates to the flattened slab
 
         Accuracy is at the voxel level.
@@ -497,12 +502,17 @@ class Isocortex3dProjector(Isocortex2dProjector):
         scale : {"voxels", "microns"}
             Scale for projected coordinates. For ease of overlay on projected
             images, use "voxels". For actual distances, use "microns".
+        thickness_type : {None, "unnormalized", "normalized_full", "normalized_layers"}, optional
+            Optional override of initial thickness type
 
         Returns
         -------
         projected_coords : array
             3D projected coordinates
         """
+        if thickness_type is None:
+            thickness_type = self.thickness_type
+
         if scale not in {"voxels", "microns"}:
             raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
 
@@ -531,11 +541,11 @@ class Isocortex3dProjector(Isocortex2dProjector):
             min_dist_idx = np.argmin(dist_to_path)
 
             # Calculate the depth
-            if self.thickness_type == "unnormalized":
+            if thickness_type == "unnormalized":
                 depth.append(min_dist_idx)
-            elif self.thickness_type == "normalized_full":
+            elif thickness_type == "normalized_full":
                 depth.append(min_dist_idx / len(matching_path) * full_thickness_voxels)
-            elif self.thickness_type == "normalized_layers":
+            elif thickness_type == "normalized_layers":
                 frac_along_path = min_dist_idx / len(matching_path)
                 # Figure out how long the path is
                 path_thickness = 0
@@ -557,14 +567,14 @@ class Isocortex3dProjector(Isocortex2dProjector):
                     else:
                         ref_layer_top += self.layer_thicknesses[k]
 
-        if self.thickness_type == "normalized_layers":
+        if thickness_type == "normalized_layers":
             ref_total_thickness = np.sum(list(self.layer_thicknesses.values()))
             depth = np.array(depth) / ref_total_thickness * full_thickness_voxels
         else:
             depth = np.array(depth)
 
         if scale == "microns":
-            if self.thickness_type == "normalized_layers":
+            if thickness_type == "normalized_layers":
                 depth_microns = depth * ref_total_thickness / full_thickness_voxels
             else:
                 depth_microns = depth * self.resolution[2]
