@@ -6,6 +6,7 @@ import logging
 from ccf_streamlines.coordinates import coordinates_to_voxels
 from skimage.measure import find_contours
 from tqdm import tqdm
+from scipy.spatial.distance import cdist
 
 
 class Isocortex2dProjector:
@@ -46,6 +47,14 @@ class Isocortex2dProjector:
             self.paths = path_f["paths"][:]
             self.volume_lookup = path_f["volume lookup"][:]
 
+        # Remove duplicate consecutive voxels from the paths
+        fixed_paths = np.zeros_like(self.paths)
+        paths_diff = np.diff(self.paths, axis=1)
+        for i in range(self.paths.shape[0]):
+            unique_inds = np.flatnonzero(paths_diff[i, :])
+            fixed_paths[i, :len(unique_inds)] = self.paths[i, :][unique_inds]
+        self.paths = fixed_paths
+
         # Select and order paths to match the projection.
         # The view_lookup array contains the indices of the 2D view in the first
         # column and indices of the (flattened) 3D volume in the second.
@@ -61,6 +70,8 @@ class Isocortex2dProjector:
             logging.info("Loading closest surface reference file")
             self.closest_surface_voxels, _ = nrrd.read(
                 closest_surface_voxel_reference_file)
+        else:
+            self.closest_surface_voxels = None
 
 
     def project_volume(self, volume, kind="max"):
@@ -108,7 +119,7 @@ class Isocortex2dProjector:
                     volume.flat[path_ind])
         return projected_volume
 
-    def project_coordinates(self, coords):
+    def project_coordinates(self, coords, scale="voxels"):
         """ Project set of coordinates to the 2D view
 
         Accuracy is at the voxel level.
@@ -117,14 +128,27 @@ class Isocortex2dProjector:
         ----------
         coords : array
             3D spatial coordinates, in microns
+        scale : {"voxels", "microns"}
+            Scale for projected coordinates. For ease of overlay on projected
+            images, use "voxels". For actual distances, use "microns".
 
         Returns
         -------
         projected_coords : array
-            2D projected coordinates, in voxels
+            2D projected coordinates, in voxels or microns (depending on `scale`)
         """
-        if self.closest_surface_voxel_reference_file is None:
-            raise ValueError("Must specific closest surface reference file to project coordinates")
+        if scale not in {"voxels", "microns"}:
+            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
+
+        projected_coords, _, _ = self._get_projected_coordinates_and_surface_voxels(coords)
+        if scale == "microns":
+            return projected_coords[0] * self.resolution[0], projected_coords[1] * self.resolution[1]
+        else:
+            return projected_coords
+
+    def _get_projected_coordinates_and_surface_voxels(self, coords):
+        if self.closest_surface_voxels is None:
+            raise ValueError("Must specify closest surface reference file to project coordinates")
 
         # Find the voxels containing the coordinates
         voxels = coordinates_to_voxels(coords, resolution=self.resolution)
@@ -144,17 +168,85 @@ class Isocortex2dProjector:
         matching_surface_voxel_ind = self.closest_surface_voxels.flat[voxel_ind]
 
         # Find the flattened projection indices for those surface voxels
-        projected_ind = np.zeros_like(matching_surface_voxel_ind)
+        projected_ind = np.zeros_like(matching_surface_voxel_ind, dtype=int)
         for i in range(projected_ind.shape[0]):
-            projected_ind[i] = self.view_lookup[
-                self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0][0]
+            matching_lookups = self.view_lookup[
+                self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0]
+            if len(matching_lookups) == 0:
+                # cannot not find location for this coordinate
+                # use sentinel value of -1 to indicate that it's missing
+                projected_ind[i] = -1
+            else:
+                projected_ind[i] = matching_lookups[0]
 
         # Convert the flattened indices to 2D coordinates
-        projected_coords = np.unravel_index(
-            projected_ind,
+        projected_coords_not_missing = np.unravel_index(
+            projected_ind[projected_ind != -1],
             self.view_size
         )
-        return projected_coords
+
+        projected_coords_x = np.zeros_like(projected_ind, dtype=float)
+        projected_coords_y = np.zeros_like(projected_ind, dtype=float)
+        projected_coords_x[projected_ind != -1] = projected_coords_not_missing[0]
+        projected_coords_x[projected_ind == -1] = np.nan
+        projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1]
+        projected_coords_y[projected_ind == -1] = np.nan
+
+        return (
+            (projected_coords_x, projected_coords_y),
+            voxels,
+            matching_surface_voxel_ind,
+        )
+
+    def streamline_for_voxel(self, voxel):
+        """ Find the streamline that is closest to the specified voxel
+
+        Parameters
+        ----------
+        voxel : array
+            3D coordinates (integer values) of voxel
+
+        Returns
+        -------
+        streamline : array
+            Array of flattened indices of the voxels belonging to the streamline
+        """
+        voxel_ind = np.ravel_multi_index(
+            tuple(voxel),
+            self.closest_surface_voxels.shape
+        )
+        matching_surface_voxel_ind = self.closest_surface_voxels.flat[voxel_ind]
+        path_ind = np.flatnonzero(self.view_lookup[:, 1] == matching_surface_voxel_ind)
+        if len(path_ind) == 0:
+            # cannot not find location for this coordinate
+            # use sentinel value of -1 to indicate that it's missing
+            logging.warning("No streamline found for voxel")
+            return None
+        else:
+            path_ind = path_ind[0]
+        return self.paths[path_ind, :]
+
+    def project_path_ordered_data(self, data):
+        """ Project 1D data corresponding to the list of streamlines
+
+        Parameters
+        ----------
+        data : array
+            1D array of data corresponding to streamlines
+
+        Returns
+        -------
+        projection : array
+            2D projection of data
+        """
+        ordered_data = data[
+            self.volume_lookup.flat[self.view_lookup[:, 1]]
+        ]
+
+        projection = np.zeros(self.view_size, dtype=data.dtype)
+        projection.flat[self.view_lookup[:, 0]] = ordered_data
+
+        return projection
 
 
 class Isocortex3dProjector(Isocortex2dProjector):
@@ -277,12 +369,11 @@ class Isocortex3dProjector(Isocortex2dProjector):
             tuple(self.view_size) + (self.paths.shape[1],),
             dtype=volume.dtype)
 
+        # Get the coordinates for the paths on the surface of the slab
+        r, c = np.unravel_index(self.view_lookup[:, 0], self.view_size)
         for i in tqdm(range(self.paths.shape[0])):
-            # Get the coordinates for the path on the surface of the slab
-            r, c = np.unravel_index(self.view_lookup[i, 0], self.view_size)
-
             # Fill in the thickness of the slab at that location from the volume
-            projected_volume[r, c, :] = volume.flat[self.paths[i, :]]
+            projected_volume[r[i], c[i], :] = volume.flat[self.paths[i, :]]
         return projected_volume
 
     def _project_volume_normalized_full(self, volume):
@@ -303,24 +394,25 @@ class Isocortex3dProjector(Isocortex2dProjector):
             dtype=volume.dtype)
         full_thickness = self.paths.shape[1]
 
-        for i in tqdm(range(self.paths.shape[0])):
-            # Get the coordinates for the path on the surface of the slab
-            r, c = np.unravel_index(self.view_lookup[i, 0], self.view_size)
+        # Get the coordinates for the paths on the surface of the slab
+        r, c = np.unravel_index(self.view_lookup[:, 0], self.view_size)
 
+        # Calculate the thickness of each path
+        path_thicknesses = np.count_nonzero(self.paths, axis=1)
+
+        for i in tqdm(range(self.paths.shape[0])):
             # Get the path data (dropping the zeros)
-            path_ind = self.paths[i, :]
-            path_ind = path_ind[path_ind > 0]
+            path_ind = self.paths[i, :path_thicknesses[i]]
 
             # Interpolate the path data to the full thickness
-            path_thickness = len(path_ind)
             interp_vol = np.interp(
-                np.linspace(0, path_thickness, full_thickness),
-                range(path_thickness),
+                np.linspace(0, path_thicknesses[i], full_thickness),
+                np.arange(path_thicknesses[i]),
                 volume.flat[path_ind]
             )
 
             # Fill in the thickness of the slab at that location from the volume
-            projected_volume[r, c, :] = interp_vol
+            projected_volume[r[i], c[i], :] = interp_vol
         return projected_volume
 
     def _project_volume_normalized_layers(self, volume):
@@ -339,26 +431,32 @@ class Isocortex3dProjector(Isocortex2dProjector):
         projected_volume = np.zeros(
             tuple(self.view_size) + (self.paths.shape[1],),
             dtype=volume.dtype)
-        full_thickness_voxels = self.paths.shape[1]
-        ref_full_thickness = np.sum(list(self.layer_thicknesses.values()))
-        ref_thickness_voxels = {k: int(np.round(full_thickness_voxels * t / ref_full_thickness))
-            for k, t in self.layer_thicknesses.items()}
 
+        ref_thickness_voxels = self._get_reference_layer_thicknesses_in_voxels()
+
+        # Get the coordinates for the path on the surface of the slab
+        r, c = np.unravel_index(self.view_lookup[:, 0], self.view_size)
+
+        max_nonzero_path_inds = np.count_nonzero(self.paths, axis=1)
+
+        all_layer_thicknesses = np.vstack(
+            [self.path_layer_thickness[k][:, 2] for k in self.ISOCORTEX_LAYER_KEYS]
+        ).T
+        path_thicknesses = np.sum(all_layer_thicknesses, axis=1)
+
+        # TODO - think of ways to vectorize some of these operations
         for i in tqdm(range(self.paths.shape[0])):
             # Get the path data (dropping the zeros)
-            path_ind = self.paths[i, :]
-            path_ind = path_ind[path_ind > 0]
+            path_ind = self.paths[i, :max_nonzero_path_inds[i]]
 
             # Create interpolation lookup
             interp_list = []
-            path_thickness = 0
             for k in self.ISOCORTEX_LAYER_KEYS:
-                pl_start, pl_end, pl_thick = self.path_layer_thickness[k][i, :]
+                pl_start, pl_end, _ = self.path_layer_thickness[k][i, :]
                 if pl_start == 0 and pl_end == 0:
                     # if layer not present in streamline, set to -1
                     interp_list.append(-1 * np.ones(ref_thickness_voxels[k]))
                 else:
-                    path_thickness += pl_thick
                     interp_list.append(
                         np.linspace(pl_start, pl_end, ref_thickness_voxels[k])
                     )
@@ -367,17 +465,113 @@ class Isocortex3dProjector(Isocortex2dProjector):
             # Interpolate the path data to the specified layer thicknesses
             interp_vol = np.interp(
                 interp_vals,
-                np.linspace(0, path_thickness, len(path_ind)),
+                np.linspace(0, path_thicknesses[i], max_nonzero_path_inds[i]),
                 volume.flat[path_ind],
                 left=0 # set values of -1 to 0 (i.e. empty for layers not present)
             )
 
-            # Get the coordinates for the path on the surface of the slab
-            r, c = np.unravel_index(self.view_lookup[i, 0], self.view_size)
-
             # Fill in the thickness of the slab at that location from the volume
-            projected_volume[r, c, :] = interp_vol
+            projected_volume[r[i], c[i], :] = interp_vol
         return projected_volume
+
+    def _get_reference_layer_thicknesses_in_voxels(self):
+        full_thickness_voxels = self.paths.shape[1]
+        ref_full_thickness = np.sum(list(self.layer_thicknesses.values()))
+        ref_thickness_voxels = {k: int(np.round(full_thickness_voxels * t / ref_full_thickness))
+            for k, t in self.layer_thicknesses.items()}
+        return ref_thickness_voxels
+
+    def project_coordinates(self, coords, scale="voxels"):
+        """ Project set of coordinates to the flattened slab
+
+        Accuracy is at the voxel level.
+
+        Parameters
+        ----------
+        coords : array
+            3D spatial coordinates, in microns
+        scale : {"voxels", "microns"}
+            Scale for projected coordinates. For ease of overlay on projected
+            images, use "voxels". For actual distances, use "microns".
+
+        Returns
+        -------
+        projected_coords : array
+            3D projected coordinates
+        """
+        if scale not in {"voxels", "microns"}:
+            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
+
+        projected_2d_coords, voxels, matching_surface_voxel_ind = self._get_projected_coordinates_and_surface_voxels(coords)
+
+        full_thickness_voxels = self.paths.shape[1]
+        depth = []
+        for i in range(matching_surface_voxel_ind.shape[0]):
+            # Get 3D coordinates of voxels of nearest path
+
+            path_idx = np.flatnonzero(self.view_lookup[:, 1] == matching_surface_voxel_ind[i])
+            if len(path_idx) == 0:
+                # No matching path in lookup - cannot find depth
+                depth.append(np.nan)
+                continue
+            else:
+                path_idx = path_idx[0]
+            matching_path = self.paths[path_idx, :]
+            matching_path = matching_path[matching_path > 0]
+            matching_path_voxels = np.unravel_index(
+                matching_path, self.volume_lookup.shape)
+            matching_path_voxels = np.array(matching_path_voxels).T
+
+            # Find voxel on path closest to the coordinate's voxel
+            dist_to_path = cdist(voxels[i, :][np.newaxis, :], matching_path_voxels)
+            min_dist_idx = np.argmin(dist_to_path)
+
+            # Calculate the depth
+            if self.thickness_type == "unnormalized":
+                depth.append(min_dist_idx)
+            elif self.thickness_type == "normalized_full":
+                depth.append(min_dist_idx / len(matching_path) * full_thickness_voxels)
+            elif self.thickness_type == "normalized_layers":
+                frac_along_path = min_dist_idx / len(matching_path)
+                # Figure out how long the path is
+                path_thickness = 0
+                for k in self.ISOCORTEX_LAYER_KEYS:
+                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
+                    path_thickness += pl_thick
+                depth_in_path = frac_along_path * path_thickness
+
+                ref_layer_top = 0
+                for k in self.ISOCORTEX_LAYER_KEYS:
+                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
+                    if pl_start == 0 and pl_end == 0:
+                        # Layer not present - skip it
+                        continue
+                    if depth_in_path <= pl_end:
+                        fraction_through_layer = (depth_in_path - pl_start) / (pl_end - pl_start)
+                        depth.append(fraction_through_layer * self.layer_thicknesses[k] + ref_layer_top)
+                        break
+                    else:
+                        ref_layer_top += self.layer_thicknesses[k]
+
+        if self.thickness_type == "normalized_layers":
+            ref_total_thickness = np.sum(list(self.layer_thicknesses.values()))
+            depth = np.array(depth) / ref_total_thickness * full_thickness_voxels
+        else:
+            depth = np.array(depth)
+
+        if scale == "microns":
+            if self.thickness_type == "normalized_layers":
+                depth_microns = depth * ref_total_thickness / full_thickness_voxels
+            else:
+                depth_microns = depth * self.resolution[2]
+            return (
+                projected_2d_coords[0] * self.resolution[0],
+                projected_2d_coords[1] * self.resolution[1],
+                depth_microns
+            )
+        else:
+            return projected_2d_coords[0], projected_2d_coords[1], depth
+
 
 class BoundaryFinder:
     """ Boundaries of cortical regions from 2D atlas projections
