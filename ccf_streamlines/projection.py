@@ -379,8 +379,15 @@ class Isocortex3dProjector(Isocortex2dProjector):
     closest_surface_voxel_reference_file : str, optional
         File path to a NRRD file containing information about the closest
         streamlines for voxels within the isocortex.
-    single_hemisphere : bool, default True
-        Whether to collapse data into a single hemisphere visualization
+    hemisphere : {"both", "left", "right"}
+        Whether to create a final projection with both hemispheres (default)
+        or just left or right.
+    view_space_for_other_hemisphere : bool or int, optional
+        If False (default), view is used as-is. If True, view is assumed to have
+        the right half reserved for the other hemisphere, so that returning
+        both hemispheres will result in a projection the size of the original
+        view. If an integer of value `n`, the right-most `n` voxels will be
+        removed before combining both hemisphere.
     """
     ISOCORTEX_LAYER_KEYS = [
         'Isocortex layer 1',
@@ -398,13 +405,15 @@ class Isocortex3dProjector(Isocortex2dProjector):
         layer_thicknesses=None,
         streamline_layer_thickness_file=None,
         closest_surface_voxel_reference_file=None,
-        single_hemisphere=True,
+        hemisphere="both",
+        view_space_for_other_hemisphere=False,
     ):
         super().__init__(
             projection_file,
             surface_paths_file,
             closest_surface_voxel_reference_file,
-            single_hemisphere
+            hemisphere,
+            view_space_for_other_hemisphere,
         )
 
         allowed_thickness_types = {"unnormalized", "normalized_full", "normalized_layers"}
@@ -452,13 +461,35 @@ class Isocortex3dProjector(Isocortex2dProjector):
                 f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_lookup.shape}")
 
         if thickness_type == "unnormalized":
-            return self._project_volume_unnormalized(volume)
+            project_func = self._project_volume_unnormalized
         elif thickness_type == "normalized_full":
-            return self._project_volume_normalized_full(volume)
+            project_func = self._project_volume_normalized_full
         elif thickness_type == "normalized_layers":
-            return self._project_volume_normalized_layers(volume)
+            project_func = self._project_volume_normalized_layers
         else:
             raise ValueError(f"Unknown thickness type {self.thickness_type}")
+
+        if self.hemisphere == "left":
+            projected_volume = project_func(volume)
+            if self.view_space_for_other_hemisphere > 0:
+                projected_volume = projected_volume[:-self.view_space_for_other_hemisphere, :, :]
+        elif self.hemisphere == "right":
+            projected_volume = project_func(np.flip(volume, axis=2))
+            if self.view_space_for_other_hemisphere > 0:
+                projected_volume = projected_volume[:-self.view_space_for_other_hemisphere, :, :]
+            projected_volume = np.flip(projected_volume, axis=0)
+        elif self.hemisphere == "both":
+            left = project_func(volume)
+            right = project_func(np.flip(volume, axis=2))
+            if self.view_space_for_other_hemisphere > 0:
+                left = left[:-self.view_space_for_other_hemisphere, :, :]
+                right = right[:-self.view_space_for_other_hemisphere, :, :]
+            right = np.flip(right, axis=0)
+            projected_volume = np.concatenate([left, right], axis=0)
+        else:
+            raise ValueError(f"invalid value of {self.hemisphere} for self.hemisphere")
+
+        return projected_volume
 
     def _project_volume_unnormalized(self, volume):
         """ Create a flattened slab view of the volume with thickness as in the volume.
@@ -626,7 +657,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
         return ref_thickness_voxels
 
     def project_coordinates(self, coords, scale="voxels", thickness_type=None,
-        collapse_hemispheres=False):
+        combine_hemispheres=False):
         """ Project set of coordinates to the flattened slab
 
         Accuracy is at the voxel level.
