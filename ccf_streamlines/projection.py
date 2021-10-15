@@ -764,7 +764,10 @@ class BoundaryFinder:
         )
         self.labels_df.columns = ["r", "g", "b", "x0", "x1", "x2", "acronym"]
 
-    def region_boundaries(self, region_acronyms=None):
+    def region_boundaries(self,
+        region_acronyms=None,
+        hemisphere="left",
+        view_space_for_other_hemisphere=False):
         """Get projection coordinates of region boundaries.
 
         Parameters
@@ -773,6 +776,17 @@ class BoundaryFinder:
             List of regions whose boundaries will be found. If None (default),
             return all regions found in projection. Regions specified but not
             present will have empty coordinate lists returned.
+        hemisphere : {"left", "right", "right_for_both"}
+            Which hemisphere to return borders for. If "right_for_both", returns
+            a shifted set of boundaries suitable for plotting on a "both"
+            hemispheres view.
+        view_space_for_other_hemisphere : bool or int, optional
+            If False (default), view is used as-is.
+            If True, view is assumed to have  the right half reserved for the
+            other hemisphere, so that returning both hemispheres will result
+            in boundaries fitted to a projection the size of the original view.
+            If an integer of value `n`, the boundaries will fit a view with
+            the right-most `n` voxels will removed before combining both hemispheres.
 
         Returns
         -------
@@ -780,6 +794,15 @@ class BoundaryFinder:
             Dictionary of region boundary coordinates with region acronyms
             as keys.
         """
+        if hemisphere not in {"left", "left_for_both", "right", "right_for_both"}:
+            raise ValueError(f"`hemisphere` is {hemisphere}; must be left, right, or right_for_both")
+
+        if view_space_for_other_hemisphere:
+            if isinstance(view_space_for_other_hemisphere, bool):
+                view_space_for_other_hemisphere = self.proj_atlas.shape[0] // 2
+        else:
+            view_space_for_other_hemisphere = 0
+
         if region_acronyms is None:
             unique_entries = np.unique(self.proj_atlas).tolist()
             unique_entries.remove(0) # 0 is defined as not a structure
@@ -809,4 +832,14 @@ class BoundaryFinder:
                     if len(c) > max_len:
                         boundaries[acronym] = c
                         max_len = len(c)
+
+        if hemisphere == "right":
+            max_x = self.proj_atlas.shape[0] - view_space_for_other_hemisphere
+            for k in boundaries:
+                boundaries[k][:, 0] = max_x - boundaries[k][:, 0]
+        elif hemisphere == "right_for_both":
+            max_x = self.proj_atlas.shape[0] - view_space_for_other_hemisphere
+            for k in boundaries:
+                boundaries[k][:, 0] = 2 * max_x - boundaries[k][:, 0]
+
         return boundaries
