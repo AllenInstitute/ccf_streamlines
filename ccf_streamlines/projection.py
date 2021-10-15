@@ -380,9 +380,9 @@ class Isocortex3dProjector(Isocortex2dProjector):
 
         # Get the coordinates for the paths on the surface of the slab
         r, c = np.unravel_index(self.view_lookup[:, 0], self.view_size)
-        for i in tqdm(range(self.paths.shape[0])):
-            # Fill in the thickness of the slab at that location from the volume
-            projected_volume[r[i], c[i], :] = volume.flat[self.paths[i, :]]
+
+        # Assign results to locations in volume
+        projected_volume[r, c, :] = volume.flat[self.paths]
         return projected_volume
 
     def _project_volume_normalized_full(self, volume):
@@ -401,7 +401,13 @@ class Isocortex3dProjector(Isocortex2dProjector):
         projected_volume = np.zeros(
             tuple(self.view_size) + (self.paths.shape[1],),
             dtype=volume.dtype)
+
+        n_paths = self.paths.shape[0]
         full_thickness = self.paths.shape[1]
+
+        # Space out values for final 1D interpolation
+        interp_interval = full_thickness + 50
+        spacing = np.arange(0, interp_interval * n_paths, interp_interval)
 
         # Get the coordinates for the paths on the surface of the slab
         r, c = np.unravel_index(self.view_lookup[:, 0], self.view_size)
@@ -409,19 +415,25 @@ class Isocortex3dProjector(Isocortex2dProjector):
         # Calculate the thickness of each path
         path_thicknesses = np.count_nonzero(self.paths, axis=1)
 
-        for i in tqdm(range(self.paths.shape[0])):
-            # Get the path data (dropping the zeros)
-            path_ind = self.paths[i, :path_thicknesses[i]]
+        # Create flattened set of interpolation locations (spacing out each path)
+        flat_interp_locs = np.linspace(
+            spacing,
+            path_thicknesses + spacing,
+            full_thickness).T.flatten()
 
-            # Interpolate the path data to the full thickness
-            interp_vol = np.interp(
-                np.linspace(0, path_thicknesses[i], full_thickness),
-                np.arange(path_thicknesses[i]),
-                volume.flat[path_ind]
-            )
+        # Find the locations of the parts of the paths with data
+        path_locs = (np.tile(np.arange(full_thickness), (n_paths, 1)) +
+            spacing[:, np.newaxis])[self.paths > 0]
 
-            # Fill in the thickness of the slab at that location from the volume
-            projected_volume[r[i], c[i], :] = interp_vol
+        # Get the (flattened) values from the volume
+        volume_vals = volume.flat[self.paths[self.paths > 0]]
+
+        # Interpolate the values all at once
+        interp_vol = np.interp(flat_interp_locs, path_locs, volume_vals)
+
+        # Assign results to locations in volume
+        projected_volume[r, c, :] = interp_vol.reshape(n_paths, -1)
+
         return projected_volume
 
     def _project_volume_normalized_layers(self, volume):
@@ -443,8 +455,8 @@ class Isocortex3dProjector(Isocortex2dProjector):
 
         ref_thickness_voxels = self._get_reference_layer_thicknesses_in_voxels()
 
-        # Get the coordinates for the path on the surface of the slab
-        r, c = np.unravel_index(self.view_lookup[:, 0], self.view_size)
+        max_path_length = self.paths.shape[1]
+        n_paths = self.paths.shape[0]
 
         max_nonzero_path_inds = np.count_nonzero(self.paths, axis=1)
 
@@ -452,35 +464,49 @@ class Isocortex3dProjector(Isocortex2dProjector):
             [self.path_layer_thickness[k][:, 2] for k in self.ISOCORTEX_LAYER_KEYS]
         ).T
         path_thicknesses = np.sum(all_layer_thicknesses, axis=1)
+        max_thickness = path_thicknesses.max()
+        interp_interval = int(np.ceil(max_thickness + 10))
+        spacing = np.arange(0, interp_interval * n_paths, interp_interval)
 
-        # TODO - think of ways to vectorize some of these operations
-        for i in tqdm(range(self.paths.shape[0])):
-            # Get the path data (dropping the zeros)
-            path_ind = self.paths[i, :max_nonzero_path_inds[i]]
+        # Find the locations of the parts of the paths with data
+        # It's scaled so that the path thickness hits
+        # the end of the actual path in the right place
+        path_locs = np.linspace(
+            spacing,
+            path_thicknesses * ((max_path_length - 1) / max_nonzero_path_inds) + spacing,
+            max_path_length
+        ).T[self.paths > 0]
 
-            # Create interpolation lookup
-            interp_list = []
-            for k in self.ISOCORTEX_LAYER_KEYS:
-                pl_start, pl_end, _ = self.path_layer_thickness[k][i, :]
-                if pl_start == 0 and pl_end == 0:
-                    # if layer not present in streamline, set to -1
-                    interp_list.append(-1 * np.ones(ref_thickness_voxels[k]))
-                else:
-                    interp_list.append(
-                        np.linspace(pl_start, pl_end, ref_thickness_voxels[k])
-                    )
-            interp_vals = np.concatenate(interp_list)
+        # Get the (flattened) values from the volume
+        volume_vals = volume.flat[self.paths[self.paths > 0]]
 
-            # Interpolate the path data to the specified layer thicknesses
-            interp_vol = np.interp(
-                interp_vals,
-                np.linspace(0, path_thicknesses[i], max_nonzero_path_inds[i]),
-                volume.flat[path_ind],
-                left=0 # set values of -1 to 0 (i.e. empty for layers not present)
+        # Get the coordinates for the path on the surface of the slab
+        r, c = np.unravel_index(self.view_lookup[:, 0], self.view_size)
+        interp_list = []
+        for k in self.ISOCORTEX_LAYER_KEYS:
+            starts = self.path_layer_thickness[k][:, 0]
+            ends = self.path_layer_thickness[k][:, 1]
+            interp_locs_for_layer = np.linspace(
+                starts + spacing,
+                ends + spacing,
+                ref_thickness_voxels[k]
             )
 
-            # Fill in the thickness of the slab at that location from the volume
-            projected_volume[r[i], c[i], :] = interp_vol
+            # if layer not present in streamline, set to -1
+            layer_absent = (ends == 0)
+            interp_locs_for_layer[:, layer_absent] = -1
+            interp_list.append(interp_locs_for_layer)
+        interp_locs = np.vstack(interp_list).T.flatten()
+
+        interp_vol = np.interp(
+            interp_locs,
+            path_locs,
+            volume_vals,
+            left=0 # set values of -1 to 0 (i.e. empty for layers not present)
+        )
+
+        # Fill in the thickness of the slab at correct locations in the volume
+        projected_volume[r, c, :] = interp_vol.reshape(n_paths, -1)
         return projected_volume
 
     def _get_reference_layer_thicknesses_in_voxels(self):
