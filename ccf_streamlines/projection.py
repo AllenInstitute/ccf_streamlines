@@ -25,6 +25,12 @@ class Isocortex2dProjector:
     hemisphere : {"both", "left", "right"}
         Whether to create a final projection with both hemispheres (default)
         or just left or right.
+    view_space_for_other_hemisphere : bool or int, optional
+        If False (default), view is used as-is. If True, view is assumed to have
+        the right half reserved for the other hemisphere, so that returning
+        both hemispheres will result in a projection the size of the original
+        view. If an integer of value `n`, the right-most `n` voxels will be
+        removed before combining both hemisphere.
     """
 
     def __init__(self,
@@ -32,6 +38,7 @@ class Isocortex2dProjector:
         surface_paths_file,
         closest_surface_voxel_reference_file=None,
         hemisphere="both",
+        view_space_for_other_hemisphere=False,
     ):
         if hemisphere not in {"both", "left", "right"}:
             raise ValueError(f"Value of `hemisphere` ({hemisphere}) is not allowed; must be `both`, `left`, or `right`.")
@@ -44,6 +51,15 @@ class Isocortex2dProjector:
             self.view_lookup = proj_f["view lookup"][:]
             self.view_size = proj_f.attrs["view size"][:]
             self.resolution = tuple(int(d.decode()) for d in proj_f.attrs["spacing"][:])
+
+        # Determine view size adjustment, if any
+        if view_space_for_other_hemisphere:
+            if isinstance(view_space_for_other_hemisphere, bool):
+                self.view_space_for_other_hemisphere = self.view_size[0] // 2
+            else:
+                self.view_space_for_other_hemisphere = view_space_for_other_hemisphere
+        else:
+            self.view_space_for_other_hemisphere = 0
 
         # Load the surface path information
         logging.info("Loading surface path file")
@@ -112,13 +128,20 @@ class Isocortex2dProjector:
 
         if self.hemisphere == "left":
             projected_volume = self._project_volume_to_view(volume, kind)
+            if self.view_space_for_other_hemisphere > 0:
+                projected_volume = projected_volume[:-self.view_space_for_other_hemisphere, :]
         elif self.hemisphere == "right":
             projected_volume = self._project_volume_to_view(
-                np.flip(volume, axis=0), kind)
-            projected_volume = np.flip(projected_volume, axis=2)
+                np.flip(volume, axis=2), kind)
+            if self.view_space_for_other_hemisphere > 0:
+                projected_volume = projected_volume[:-self.view_space_for_other_hemisphere, :]
+            projected_volume = np.flip(projected_volume, axis=0)
         elif self.hemisphere == "both":
             left = self._project_volume_to_view(volume, kind)
             right = self._project_volume_to_view(np.flip(volume, axis=2), kind)
+            if self.view_space_for_other_hemisphere > 0:
+                left = left[:-self.view_space_for_other_hemisphere, :]
+                right = right[:-self.view_space_for_other_hemisphere, :]
             right = np.flip(right, axis=0)
             projected_volume = np.concatenate([left, right], axis=0)
         else:
@@ -174,9 +197,11 @@ class Isocortex2dProjector:
             images, use "voxels". For actual distances, use "microns".
         combine_hemispheres : bool, optional
             If False (default), only return coordinates from the selected
-            hemisphere (left or right). If True, reflects coordinates from the
-            other hemisphere to the selected hemisphere. Not used if the
-            instance's hemisphere parameter is "both".
+            hemisphere (left or right) - other coordinates will be np.nan.
+            If True, reflects coordinates from the other hemisphere to the
+            selected hemisphere.
+            Not used if the Isocortex2dProjector's `hemisphere` parameter is
+            set to "both".
 
         Returns
         -------
@@ -240,18 +265,35 @@ class Isocortex2dProjector:
         projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1]
         projected_coords_y[projected_ind == -1] = np.nan
 
-        if combine_hemispheres and self.hemisphere in {"left", "right"}:
-            if self.hemisphere == "right":
-                # everything is already on the left hemisphere, so if we
-                # want it on the right, need to reflect the first dimension
-                max_x = self.view_size[0]
-                projected_coords_x = max_x - projected_coords_x
-        else:
+        if self.hemisphere == "both":
             # need to separate the left and right coordinates & flip the ones
             # that should be on the right
-            max_x = self.view_size[0]
+            max_x = self.view_size[0] - self.view_space_for_other_hemisphere
             voxels_on_right = orig_voxels[:, 2] > z_midline
+
+            # Need to double max_x because there's space for both hemispheres
             projected_coords_x[voxels_on_right] = 2 * max_x - projected_coords_x[voxels_on_right]
+        elif combine_hemispheres:
+            if self.hemisphere == "right":
+                # everything is already on the left hemisphere, so if we
+                # want it on the right instead, need to reflect the first dimension
+                max_x = self.view_size[0] - self.view_space_for_other_hemisphere
+                projected_coords_x = max_x - projected_coords_x
+        else:
+            voxels_on_right = orig_voxels[:, 2] > z_midline
+            if self.hemisphere == "left":
+                # already on the left, just need to remove (set to nan) the
+                # ones on the right
+                 projected_coords_x[voxels_on_right] = np.nan
+                 projected_coords_y[voxels_on_right] = np.nan
+            elif self.hemisphere == "right":
+                # flip coordinates to the right and set the ones on the left
+                # to nan
+                max_x = self.view_size[0] - self.view_space_for_other_hemisphere
+                projected_coords_x = max_x - projected_coords_x
+
+                projected_coords_x[~voxels_on_right] = np.nan
+                projected_coords_y[~voxels_on_right] = np.nan
 
         return (
             (projected_coords_x, projected_coords_y),
