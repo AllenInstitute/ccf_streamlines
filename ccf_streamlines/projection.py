@@ -47,19 +47,34 @@ class Isocortex2dProjector:
             self.paths = path_f["paths"][:]
             self.volume_lookup = path_f["volume lookup"][:]
 
-        # Remove duplicate consecutive voxels from the paths
-        fixed_paths = np.zeros_like(self.paths)
+        # Remove duplicate consecutive voxels from the paths:
+        # First identify places where voxels change (i.e. no duplicates) as
+        # values to keep
+        logging.info("Cleaning up loaded paths")
         paths_diff = np.diff(self.paths, axis=1)
-        for i in range(self.paths.shape[0]):
-            unique_inds = np.flatnonzero(paths_diff[i, :])
-            fixed_paths[i, :len(unique_inds)] = self.paths[i, :][unique_inds]
-        self.paths = fixed_paths
+        r, c = np.nonzero(paths_diff)
+
+        # Determine how many remaining entries per line and how many zeros to
+        # add at the end
+        nonzero_per_row = np.count_nonzero(paths_diff, axis=1)
+        n_paths, max_len = self.paths.shape
+        zeros_at_end = max_len - nonzero_per_row
+
+        # Insert the zeros at the ends of each line, then put back together
+        # into 2D array
+        insert_locs = np.cumsum(nonzero_per_row)
+        insert_locs = np.repeat(insert_locs, zeros_at_end)
+        self.paths = np.insert(
+            self.paths[r, c],
+            insert_locs,
+            0).reshape(n_paths, -1)
 
         # Select and order paths to match the projection.
         # The view_lookup array contains the indices of the 2D view in the first
         # column and indices of the (flattened) 3D volume in the second.
         # We find the indices of the paths by going to the appropriate voxels
         # in volume_lookup.
+        logging.info("Sorting paths to match view lookup")
         self.paths = self.paths[
             self.volume_lookup.flat[self.view_lookup[:, 1]],
             :
