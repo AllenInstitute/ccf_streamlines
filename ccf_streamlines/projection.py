@@ -22,17 +22,21 @@ class Isocortex2dProjector:
     closest_surface_voxel_reference_file : str, optional
         File path to a NRRD file containing information about the closest
         streamlines for voxels within the isocortex.
-    single_hemisphere : bool, default True
-        Whether to collapse data into a single hemisphere visualization
+    hemisphere : {"both", "left", "right"}
+        Whether to create a final projection with both hemispheres (default)
+        or just left or right.
     """
 
     def __init__(self,
         projection_file,
         surface_paths_file,
         closest_surface_voxel_reference_file=None,
-        single_hemisphere=True,
+        hemisphere="both",
     ):
-        self.single_hemisphere = single_hemisphere
+        if hemisphere not in {"both", "left", "right"}:
+            raise ValueError(f"Value of `hemisphere` ({hemisphere}) is not allowed; must be `both`, `left`, or `right`.")
+
+        self.hemisphere = hemisphere
 
         # Load the projection information
         logging.info("Loading projection file")
@@ -105,6 +109,24 @@ class Isocortex2dProjector:
         projected_volume : array
             2D projection of input volume
         """
+
+        if self.hemisphere == "left":
+            projected_volume = self._project_volume_to_view(volume, kind)
+        elif self.hemisphere == "right":
+            projected_volume = self._project_volume_to_view(
+                np.flip(volume, axis=0), kind)
+            projected_volume = np.flip(projected_volume, axis=2)
+        elif self.hemisphere == "both":
+            left = self._project_volume_to_view(volume, kind)
+            right = self._project_volume_to_view(np.flip(volume, axis=2), kind)
+            right = np.flip(right, axis=0)
+            projected_volume = np.concatenate([left, right], axis=0)
+        else:
+            raise ValueError(f"invalid value of {self.hemisphere} for self.hemisphere")
+
+        return projected_volume
+
+    def _project_volume_to_view(self, volume, kind="max"):
         if volume.shape != self.volume_lookup.shape:
             raise ValueError(
                 f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_lookup.shape}")
@@ -138,7 +160,7 @@ class Isocortex2dProjector:
 
         return projected_volume
 
-    def project_coordinates(self, coords, scale="voxels"):
+    def project_coordinates(self, coords, scale="voxels", combine_hemispheres=False):
         """ Project set of coordinates to the 2D view
 
         Accuracy is at the voxel level.
@@ -150,6 +172,11 @@ class Isocortex2dProjector:
         scale : {"voxels", "microns"}
             Scale for projected coordinates. For ease of overlay on projected
             images, use "voxels". For actual distances, use "microns".
+        combine_hemispheres : bool, optional
+            If False (default), only return coordinates from the selected
+            hemisphere (left or right). If True, reflects coordinates from the
+            other hemisphere to the selected hemisphere. Not used if the
+            instance's hemisphere parameter is "both".
 
         Returns
         -------
@@ -159,25 +186,27 @@ class Isocortex2dProjector:
         if scale not in {"voxels", "microns"}:
             raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
 
-        projected_coords, _, _ = self._get_projected_coordinates_and_surface_voxels(coords)
+        projected_coords, _, _ = self._get_projected_coordinates_and_surface_voxels(coords, combine_hemispheres)
         if scale == "microns":
-            return projected_coords[0] * self.resolution[0], projected_coords[1] * self.resolution[1]
+            # first dimension is left-right (z in CCF),
+            # second dimension is anterior-posterior (x in CCF)
+            return projected_coords[0] * self.resolution[2], projected_coords[1] * self.resolution[0]
         else:
             return projected_coords
 
-    def _get_projected_coordinates_and_surface_voxels(self, coords):
+    def _get_projected_coordinates_and_surface_voxels(self, coords, combine_hemispheres):
         if self.closest_surface_voxels is None:
             raise ValueError("Must specify closest surface reference file to project coordinates")
 
         # Find the voxels containing the coordinates
-        voxels = coordinates_to_voxels(coords, resolution=self.resolution)
+        orig_voxels = coordinates_to_voxels(coords, resolution=self.resolution)
+        voxels = orig_voxels.copy()
 
-        if self.single_hemisphere:
-            # Reflect voxels in other hemisphere to projected hemisphere.
-            # Projected hemisphere is in lower half of z-dimension
-            z_size = self.closest_surface_voxels.shape[2]
-            z_midline = z_size / 2
-            voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
+        # Reflect voxels in other hemisphere to projected hemisphere.
+        # Projected hemisphere is in lower half of z-dimension (aka left)
+        z_size = self.closest_surface_voxels.shape[2]
+        z_midline = z_size / 2
+        voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
 
         # Find the surface voxels that best match the voxels
         voxel_ind = np.ravel_multi_index(
@@ -210,6 +239,19 @@ class Isocortex2dProjector:
         projected_coords_x[projected_ind == -1] = np.nan
         projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1]
         projected_coords_y[projected_ind == -1] = np.nan
+
+        if combine_hemispheres and self.hemisphere in {"left", "right"}:
+            if self.hemisphere == "right":
+                # everything is already on the left hemisphere, so if we
+                # want it on the right, need to reflect the first dimension
+                max_x = self.view_size[0]
+                projected_coords_x = max_x - projected_coords_x
+        else:
+            # need to separate the left and right coordinates & flip the ones
+            # that should be on the right
+            max_x = self.view_size[0]
+            voxels_on_right = orig_voxels[:, 2] > z_midline
+            projected_coords_x[voxels_on_right] = 2 * max_x - projected_coords_x[voxels_on_right]
 
         return (
             (projected_coords_x, projected_coords_y),
@@ -541,7 +583,8 @@ class Isocortex3dProjector(Isocortex2dProjector):
             for k, t in self.layer_thicknesses.items()}
         return ref_thickness_voxels
 
-    def project_coordinates(self, coords, scale="voxels", thickness_type=None):
+    def project_coordinates(self, coords, scale="voxels", thickness_type=None,
+        collapse_hemispheres=False):
         """ Project set of coordinates to the flattened slab
 
         Accuracy is at the voxel level.
@@ -555,6 +598,11 @@ class Isocortex3dProjector(Isocortex2dProjector):
             images, use "voxels". For actual distances, use "microns".
         thickness_type : {None, "unnormalized", "normalized_full", "normalized_layers"}, optional
             Optional override of initial thickness type
+        combine_hemispheres : bool, optional
+            If False (default), only return coordinates from the selected
+            hemisphere (left or right). If True, reflects coordinates from the
+            other hemisphere to the selected hemisphere. Not used if the
+            instance's hemisphere parameter is "both".
 
         Returns
         -------
@@ -567,7 +615,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
         if scale not in {"voxels", "microns"}:
             raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
 
-        projected_2d_coords, voxels, matching_surface_voxel_ind = self._get_projected_coordinates_and_surface_voxels(coords)
+        projected_2d_coords, voxels, matching_surface_voxel_ind = self._get_projected_coordinates_and_surface_voxels(coords, combine_hemispheres)
 
         full_thickness_voxels = self.paths.shape[1]
         depth = []
@@ -628,10 +676,10 @@ class Isocortex3dProjector(Isocortex2dProjector):
             if thickness_type == "normalized_layers":
                 depth_microns = depth * ref_total_thickness / full_thickness_voxels
             else:
-                depth_microns = depth * self.resolution[2]
+                depth_microns = depth * self.resolution[1]
             return (
-                projected_2d_coords[0] * self.resolution[0],
-                projected_2d_coords[1] * self.resolution[1],
+                projected_2d_coords[0] * self.resolution[2],
+                projected_2d_coords[1] * self.resolution[0],
                 depth_microns
             )
         else:
