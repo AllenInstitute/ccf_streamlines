@@ -453,7 +453,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
             tuple(self.view_size) + (self.paths.shape[1],),
             dtype=volume.dtype)
 
-        ref_thickness_voxels = self._get_reference_layer_thicknesses_in_voxels()
+        ref_thickness_voxels = self.reference_layer_thicknesses_in_voxels()
 
         max_path_length = self.paths.shape[1]
         n_paths = self.paths.shape[0]
@@ -509,7 +509,17 @@ class Isocortex3dProjector(Isocortex2dProjector):
         projected_volume[r, c, :] = interp_vol.reshape(n_paths, -1)
         return projected_volume
 
-    def _get_reference_layer_thicknesses_in_voxels(self):
+    def reference_layer_thicknesses_in_voxels(self):
+        """ Get thicknesses of the reference layers in voxel units
+
+        Can be used, for example, for ploting the layer boundaries on a
+        projected volume side view
+
+        Returns
+        -------
+        ref_thickness_voxels : dict
+            Dictionary with thicknesses of each layer in voxels
+        """
         full_thickness_voxels = self.paths.shape[1]
         ref_full_thickness = np.sum(list(self.layer_thicknesses.values()))
         ref_thickness_voxels = {k: int(np.round(full_thickness_voxels * t / ref_full_thickness))
