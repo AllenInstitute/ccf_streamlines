@@ -63,31 +63,11 @@ class Isocortex2dProjector:
 
         # Load the surface path information
         logging.info("Loading surface path file")
+        self.surface_paths_file = surface_paths_file
         with h5py.File(surface_paths_file, "r") as path_f:
             self.paths = path_f["paths"][:]
-            self.volume_lookup = path_f["volume lookup"][:]
-
-        # Remove duplicate consecutive voxels from the paths:
-        # First identify places where voxels change (i.e. no duplicates) as
-        # values to keep
-        logging.info("Cleaning up loaded paths")
-        paths_diff = np.diff(self.paths, axis=1)
-        r, c = np.nonzero(paths_diff)
-
-        # Determine how many remaining entries per line and how many zeros to
-        # add at the end
-        nonzero_per_row = np.count_nonzero(paths_diff, axis=1)
-        n_paths, max_len = self.paths.shape
-        zeros_at_end = max_len - nonzero_per_row
-
-        # Insert the zeros at the ends of each line, then put back together
-        # into 2D array
-        insert_locs = np.cumsum(nonzero_per_row)
-        insert_locs = np.repeat(insert_locs, zeros_at_end)
-        self.paths = np.insert(
-            self.paths[r, c],
-            insert_locs,
-            0).reshape(n_paths, -1)
+            volume_lookup = path_f["volume lookup"][:]
+        self.volume_shape = volume_lookup.shape
 
         # Select and order paths to match the projection.
         # The view_lookup array contains the indices of the 2D view in the first
@@ -95,8 +75,10 @@ class Isocortex2dProjector:
         # We find the indices of the paths by going to the appropriate voxels
         # in volume_lookup.
         logging.info("Sorting paths to match view lookup")
+
+        self.volume_shape = volume_lookup.shape
         self.paths = self.paths[
-            self.volume_lookup.flat[self.view_lookup[:, 1]],
+            volume_lookup.flat[self.view_lookup[:, 1]],
             :
         ]
 
@@ -150,9 +132,9 @@ class Isocortex2dProjector:
         return projected_volume
 
     def _project_volume_to_view(self, volume, kind="max"):
-        if volume.shape != self.volume_lookup.shape:
+        if volume.shape != self.volume_shape:
             raise ValueError(
-                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_lookup.shape}")
+                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}")
 
         projected_volume = np.zeros(self.view_size, dtype=volume.dtype)
 
@@ -342,9 +324,10 @@ class Isocortex2dProjector:
         projection : array
             2D projection of data
         """
-        ordered_data = data[
-            self.volume_lookup.flat[self.view_lookup[:, 1]]
-        ]
+        with h5py.File(self.surface_paths_file, "r") as path_f:
+            ordered_data = data[
+                path_f["volume lookup"][:].flat[self.view_lookup[:, 1]]
+            ]
 
         projection = np.zeros(self.view_size, dtype=data.dtype)
         projection.flat[self.view_lookup[:, 0]] = ordered_data
@@ -423,20 +406,24 @@ class Isocortex3dProjector(Isocortex2dProjector):
 
         self.layer_thicknesses = layer_thicknesses
 
-        if thickness_type is "normalized_layers":
+        if thickness_type == "normalized_layers":
             if streamline_layer_thickness_file is None:
                 raise ValueError("`streamline_layer_thickness_file` cannot be None if `thickness_type` is `normalized_layers`")
             if layer_thicknesses is None:
                 raise ValueError("`layer_thicknesses` cannot be None if `thickness_type` is `normalized_layers`")
 
             self.path_layer_thickness = {}
+
+            with h5py.File(surface_paths_file, "r") as f:
+                volume_lookup = f["volume lookup"][:]
+
             with h5py.File(streamline_layer_thickness_file, "r") as f:
                 for k in self.ISOCORTEX_LAYER_KEYS:
                     self.path_layer_thickness[k] = f[k][:]
 
                     # Select and order paths to match the projection.
                     self.path_layer_thickness[k] = self.path_layer_thickness[k][
-                        self.volume_lookup.flat[self.view_lookup[:, 1]], :]
+                        volume_lookup.flat[self.view_lookup[:, 1]], :]
 
     def project_volume(self, volume, thickness_type=None):
         """ Create a flattened slab view of the volume.
@@ -456,9 +443,9 @@ class Isocortex3dProjector(Isocortex2dProjector):
         if thickness_type is None:
             thickness_type = self.thickness_type
 
-        if volume.shape != self.volume_lookup.shape:
+        if volume.shape != self.volume_shape:
             raise ValueError(
-                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_lookup.shape}")
+                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}")
 
         if thickness_type == "unnormalized":
             project_func = self._project_volume_unnormalized
@@ -705,7 +692,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
             matching_path = self.paths[path_idx, :]
             matching_path = matching_path[matching_path > 0]
             matching_path_voxels = np.unravel_index(
-                matching_path, self.volume_lookup.shape)
+                matching_path, self.volume_shape)
             matching_path_voxels = np.array(matching_path_voxels).T
 
             # Find voxel on path closest to the coordinate's voxel
