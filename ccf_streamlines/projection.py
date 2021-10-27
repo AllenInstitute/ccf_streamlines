@@ -211,6 +211,7 @@ class Isocortex2dProjector:
 
         # Reflect voxels in other hemisphere to projected hemisphere.
         # Projected hemisphere is in lower half of z-dimension (aka left)
+        # Closest voxels reference only exists for left hemisphere
         z_size = self.closest_surface_voxels.shape[2]
         z_midline = z_size / 2
         voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
@@ -861,3 +862,132 @@ class BoundaryFinder:
                 boundaries[k][:, 0] = 2 * max_x - boundaries[k][:, 0]
 
         return boundaries
+
+
+class CcfDepthProjector:
+    """"
+    Parameters
+    ----------
+    surface_paths_file : str
+        File path to an HDF5 file containing information about the paths between
+        the top and bottom of cortex.
+    closest_surface_voxel_reference_file : str, optional
+        File path to a NRRD file containing information about the closest
+        streamlines for voxels within the isocortex.
+    """
+
+    ISOCORTEX_LAYER_KEYS = [
+        'Isocortex layer 1',
+        'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
+        'Isocortex layer 4',
+        'Isocortex layer 5',
+        'Isocortex layer 6a',
+        'Isocortex layer 6b'
+    ]
+
+    def __init__(self,
+        surface_paths_file,
+        closest_surface_voxel_reference_file,
+        layer_thicknesses,
+        streamline_layer_thickness_file,
+        resolution=(10, 10, 10)):
+
+        self.layer_thicknesses = layer_thicknesses
+
+        # Load the surface path information
+        logging.info("Loading surface path file")
+        self.surface_paths_file = surface_paths_file
+        with h5py.File(surface_paths_file, "r") as path_f:
+            self.paths = path_f["paths"][:]
+            self.volume_lookup = path_f["volume lookup"][:]
+        self.volume_shape = self.volume_lookup.shape
+
+        self.closest_surface_voxels, _ = nrrd.read(
+            closest_surface_voxel_reference_file)
+
+        self.path_layer_thickness = {}
+        with h5py.File(streamline_layer_thickness_file, "r") as f:
+            for k in self.ISOCORTEX_LAYER_KEYS:
+                self.path_layer_thickness[k] = f[k][:]
+
+        self.resolution = resolution
+
+    def ccf_depths(self, coords, thickness_type='normalized_layers', scale='voxels'):
+        voxels = coordinates_to_voxels(coords, resolution=self.resolution)
+
+        # Reflect voxels to left hemisphere since closest surface voxels are only
+        # defined on left side
+        z_size = self.closest_surface_voxels.shape[2]
+        z_midline = z_size / 2
+        voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
+
+        # Find the surface voxels that best match the voxels
+        voxel_ind = np.ravel_multi_index(
+            tuple(voxels[:, i] for i in range(voxels.shape[1])),
+            self.closest_surface_voxels.shape
+        )
+        matching_surface_voxel_ind = self.closest_surface_voxels.flat[voxel_ind]
+
+        full_thickness_voxels = self.paths.shape[1]
+        depth = []
+        path_inds = self.volume_lookup.flat[matching_surface_voxel_ind]
+        for i in range(matching_surface_voxel_ind.shape[0]):
+            # Get 3D coordinates of voxels of nearest path
+
+            path_idx = path_inds[i]
+            if path_idx == -1:
+                # No matching path for this voxel
+                depth.append(np.nan)
+                continue
+
+            matching_path = self.paths[path_idx, :]
+            matching_path = matching_path[matching_path > 0]
+            matching_path_voxels = np.unravel_index(
+                matching_path, self.volume_shape)
+            matching_path_voxels = np.array(matching_path_voxels).T
+
+            # Find voxel on path closest to the coordinate's voxel
+            dist_to_path = cdist(voxels[i, :][np.newaxis, :], matching_path_voxels)
+            min_dist_idx = np.argmin(dist_to_path)
+
+            # Calculate the depth
+            if thickness_type == "unnormalized":
+                depth.append(min_dist_idx)
+            elif thickness_type == "normalized_full":
+                depth.append(min_dist_idx / len(matching_path) * full_thickness_voxels)
+            elif thickness_type == "normalized_layers":
+                frac_along_path = min_dist_idx / len(matching_path)
+                # Figure out how long the path is
+                path_thickness = 0
+                for k in self.ISOCORTEX_LAYER_KEYS:
+                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
+                    path_thickness += pl_thick
+                depth_in_path = frac_along_path * path_thickness
+
+                ref_layer_top = 0
+                for k in self.ISOCORTEX_LAYER_KEYS:
+                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
+                    if pl_start == 0 and pl_end == 0:
+                        # Layer not present - skip it
+                        continue
+                    if depth_in_path <= pl_end:
+                        fraction_through_layer = (depth_in_path - pl_start) / (pl_end - pl_start)
+                        depth.append(fraction_through_layer * self.layer_thicknesses[k] + ref_layer_top)
+                        break
+                    else:
+                        ref_layer_top += self.layer_thicknesses[k]
+
+        if thickness_type == "normalized_layers":
+            ref_total_thickness = np.sum(list(self.layer_thicknesses.values()))
+            depth = np.array(depth) / ref_total_thickness * full_thickness_voxels
+        else:
+            depth = np.array(depth)
+
+        if scale == "microns":
+            if thickness_type == "normalized_layers":
+                depth_microns = depth * ref_total_thickness / full_thickness_voxels
+            else:
+                depth_microns = depth * self.resolution[1]
+            return depth_microns
+        else:
+            return depth
