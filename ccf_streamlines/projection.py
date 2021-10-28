@@ -21,7 +21,7 @@ class Isocortex2dProjector:
         File path to an HDF5 file containing information about the paths between
         the top and bottom of cortex.
     closest_surface_voxel_reference_file : str, optional
-        File path to a NRRD file containing information about the closest
+        File path to an HDF5 file containing information about the closest
         streamlines for voxels within the isocortex.
     hemisphere : {"both", "left", "right"}
         Whether to create a final projection with both hemispheres (default)
@@ -368,7 +368,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
         Default None. File path to an HDF5 file containing information about
         the layer thicknesses per streamline.
     closest_surface_voxel_reference_file : str, optional
-        File path to a NRRD file containing information about the closest
+        File path to an HDF5 file containing information about the closest
         streamlines for voxels within the isocortex.
     hemisphere : {"both", "left", "right"}
         Whether to create a final projection with both hemispheres (default)
@@ -872,15 +872,24 @@ class BoundaryFinder:
 
 
 class CcfDepthProjector:
-    """"
+    """" Class for projecting CCF coordinates to determine depth from pia
+
     Parameters
     ----------
     surface_paths_file : str
         File path to an HDF5 file containing information about the paths between
         the top and bottom of cortex.
-    closest_surface_voxel_reference_file : str, optional
-        File path to a NRRD file containing information about the closest
+    closest_surface_voxel_reference_file : str
+        File path to a HDF5 file containing information about the closest
         streamlines for voxels within the isocortex.
+    layer_thicknesses : dict
+        Default None. Dictionary of layer thicknesses. Only used if
+        `thickness_type` is `normalized_layers`.
+    streamline_layer_thickness_file : str
+        Default None. File path to an HDF5 file containing information about
+        the layer thicknesses per streamline.
+    resolution : tuple, default (10, 10, 10)
+        3-tuple of voxel dimensions in microns
     """
 
     ISOCORTEX_LAYER_KEYS = [
@@ -921,6 +930,25 @@ class CcfDepthProjector:
         self.resolution = resolution
 
     def ccf_depths(self, coords, thickness_type='normalized_layers', scale='voxels'):
+        """ Determine depths of set of CCF coordinates
+
+        Accuracy is at the voxel level.
+
+        Parameters
+        ----------
+        coords : array
+            3D spatial coordinates, in microns
+        thickness_type : {None, "unnormalized", "normalized_full", "normalized_layers"}, optional
+            Optional override of initial thickness type
+        scale : {"voxels", "microns"}
+            Scale for projected coordinates. For ease of overlay on projected
+            images, use "voxels". For actual distances, use "microns".
+
+        Returns
+        -------
+        depths : array
+            Depths from pia
+        """
         voxels = coordinates_to_voxels(coords, resolution=self.resolution)
 
         # Reflect voxels to left hemisphere since closest surface voxels are only
