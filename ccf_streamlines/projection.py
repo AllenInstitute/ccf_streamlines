@@ -1,8 +1,9 @@
-import numpy as np
-import pandas as pd
 import nrrd
 import h5py
 import logging
+import itertools
+import numpy as np
+import pandas as pd
 from ccf_streamlines.coordinates import coordinates_to_voxels
 from skimage.measure import find_contours
 from tqdm import tqdm
@@ -64,32 +65,34 @@ class Isocortex2dProjector:
         # Load the surface path information
         logging.info("Loading surface path file")
         self.surface_paths_file = surface_paths_file
-        with h5py.File(surface_paths_file, "r") as path_f:
-            self.paths = path_f["paths"][:]
-            volume_lookup = path_f["volume lookup"][:]
-        self.volume_shape = volume_lookup.shape
-
-        # Select and order paths to match the projection.
-        # The view_lookup array contains the indices of the 2D view in the first
-        # column and indices of the (flattened) 3D volume in the second.
-        # We find the indices of the paths by going to the appropriate voxels
-        # in volume_lookup.
-        logging.info("Sorting paths to match view lookup")
-
-        self.volume_shape = volume_lookup.shape
-        self.paths = self.paths[
-            volume_lookup.flat[self.view_lookup[:, 1]],
-            :
-        ]
+        self.paths = self._load_and_sort_paths(surface_paths_file)
 
         # Load the closest surface voxel reference file, if provided
         if closest_surface_voxel_reference_file is not None:
             logging.info("Loading closest surface reference file")
-            self.closest_surface_voxels, _ = nrrd.read(
-                closest_surface_voxel_reference_file)
+            with h5py.File(closest_surface_voxel_reference_file, "r") as f:
+                closest_dset = f["closest surface voxel"]
+                self.closest_surface_voxels = closest_dset[:]
         else:
             self.closest_surface_voxels = None
+        print("done")
 
+    def _load_and_sort_paths(self, surface_paths_file):
+        with h5py.File(surface_paths_file, "r") as path_f:
+            paths_dset = path_f["paths"]
+            volume_lookup_dset = path_f["volume lookup"]
+            self.volume_shape = volume_lookup_dset.shape
+            volume_lookup = volume_lookup_dset[:]
+
+            # Select and order paths to match the projection.
+            # The view_lookup array contains the indices of the 2D view in the first
+            # column and indices of the (flattened) 3D volume in the second.
+            # We find the indices of the paths by going to the appropriate voxels
+            # in volume_lookup.
+            logging.info("Sorting paths to match view lookup")
+            paths = paths_dset[:][
+                volume_lookup.flat[self.view_lookup[:, 1]], :]
+            return paths
 
     def project_volume(self, volume, kind="max"):
         """ Create a maximum projection view of the volume
@@ -212,24 +215,26 @@ class Isocortex2dProjector:
         # Reflect voxels in other hemisphere to projected hemisphere.
         # Projected hemisphere is in lower half of z-dimension (aka left)
         # Closest voxels reference only exists for left hemisphere
-        z_size = self.closest_surface_voxels.shape[2]
+        z_size = self.volume_shape[2]
         z_midline = z_size / 2
         voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
 
         # Find the surface voxels that best match the voxels
-        voxel_ind = np.ravel_multi_index(
+        voxel_inds = np.ravel_multi_index(
             tuple(voxels[:, i] for i in range(voxels.shape[1])),
-            self.closest_surface_voxels.shape
+            self.volume_shape
         )
-        matching_surface_voxel_ind = self.closest_surface_voxels.flat[voxel_ind]
+        matching_surface_voxel_ind = _matching_surface_voxel_indices(
+            voxel_inds,
+            self.closest_surface_voxels)
 
         # Find the flattened projection indices for those surface voxels
-        projected_ind = np.zeros_like(matching_surface_voxel_ind, dtype=int)
+        projected_ind = np.zeros_like(voxel_inds, dtype=int)
         for i in range(projected_ind.shape[0]):
             matching_lookups = self.view_lookup[
                 self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0]
             if len(matching_lookups) == 0:
-                # cannot not find location for this coordinate
+                # cannot find surface location for this coordinate
                 # use sentinel value of -1 to indicate that it's missing
                 projected_ind[i] = -1
             else:
@@ -299,9 +304,11 @@ class Isocortex2dProjector:
         """
         voxel_ind = np.ravel_multi_index(
             tuple(voxel),
-            self.closest_surface_voxels.shape
+            self.volume_shape
         )
-        matching_surface_voxel_ind = self.closest_surface_voxels.flat[voxel_ind]
+        matching_surface_voxel_ind = _matching_surface_voxel_indices(
+            voxel_ind,
+            self.closest_surface_voxels)[0]
         path_ind = np.flatnonzero(self.view_lookup[:, 1] == matching_surface_voxel_ind)
         if len(path_ind) == 0:
             # cannot not find location for this coordinate
@@ -902,8 +909,9 @@ class CcfDepthProjector:
             self.volume_lookup = path_f["volume lookup"][:]
         self.volume_shape = self.volume_lookup.shape
 
-        self.closest_surface_voxels, _ = nrrd.read(
-            closest_surface_voxel_reference_file)
+        with h5py.File(closest_surface_voxel_reference_file, "r") as f:
+            closest_dset = f["closest surface voxel"]
+            self.closest_surface_voxels = closest_dset[:]
 
         self.path_layer_thickness = {}
         with h5py.File(streamline_layer_thickness_file, "r") as f:
@@ -917,16 +925,18 @@ class CcfDepthProjector:
 
         # Reflect voxels to left hemisphere since closest surface voxels are only
         # defined on left side
-        z_size = self.closest_surface_voxels.shape[2]
+        z_size = self.volume_shape[2]
         z_midline = z_size / 2
         voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
 
         # Find the surface voxels that best match the voxels
-        voxel_ind = np.ravel_multi_index(
+        voxel_inds = np.ravel_multi_index(
             tuple(voxels[:, i] for i in range(voxels.shape[1])),
-            self.closest_surface_voxels.shape
+            self.volume_shape
         )
-        matching_surface_voxel_ind = self.closest_surface_voxels.flat[voxel_ind]
+        matching_surface_voxel_ind = _matching_surface_voxel_indices(
+            voxel_inds,
+            self.closest_surface_voxels)
 
         full_thickness_voxels = self.paths.shape[1]
         depth = []
@@ -991,3 +1001,15 @@ class CcfDepthProjector:
             return depth_microns
         else:
             return depth
+
+
+def _matching_surface_voxel_indices(voxel_inds, matching_voxel_lookup):
+    """ Finds matching (flattened) voxels in lookup. Missing values return 0."""
+    matching_surface_voxel_ind = np.zeros_like(voxel_inds, dtype=int)
+    has_match = np.isin(voxel_inds, matching_voxel_lookup[:, 0])
+    lookup_ind = np.searchsorted(
+        matching_voxel_lookup[:, 0],
+        voxel_inds[has_match]
+    )
+    matching_surface_voxel_ind[has_match] = matching_voxel_lookup[lookup_ind, 1]
+    return matching_surface_voxel_ind
