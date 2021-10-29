@@ -65,7 +65,7 @@ class Isocortex2dProjector:
         # Load the surface path information
         logging.info("Loading surface path file")
         self.surface_paths_file = surface_paths_file
-        self.paths = self._load_and_sort_paths(surface_paths_file)
+        self.paths, self.path_ordering = self._load_and_sort_paths(surface_paths_file)
 
         # Load the closest surface voxel reference file, if provided
         if closest_surface_voxel_reference_file is not None:
@@ -79,10 +79,9 @@ class Isocortex2dProjector:
 
     def _load_and_sort_paths(self, surface_paths_file):
         with h5py.File(surface_paths_file, "r") as path_f:
-            paths_dset = path_f["paths"]
-            volume_lookup_dset = path_f["volume lookup"]
-            self.volume_shape = volume_lookup_dset.shape
-            volume_lookup = volume_lookup_dset[:]
+            paths = path_f["paths"][:]
+            volume_lookup_dset = path_f["volume lookup flat"]
+            self.volume_shape = tuple(volume_lookup_dset.attrs["original shape"])
 
             # Select and order paths to match the projection.
             # The view_lookup array contains the indices of the 2D view in the first
@@ -90,9 +89,26 @@ class Isocortex2dProjector:
             # We find the indices of the paths by going to the appropriate voxels
             # in volume_lookup.
             logging.info("Sorting paths to match view lookup")
-            paths = paths_dset[:][
-                volume_lookup.flat[self.view_lookup[:, 1]], :]
-            return paths
+
+            view_sorter = np.argsort(self.view_lookup[:, 1])
+            view_unsorter = np.argsort(view_sorter)
+
+            # pull chunks from volume lookup to reduce memory usage
+            chunk_size = 1000
+            sorted_lookup = self.view_lookup[view_sorter, 1]
+            path_ind = np.zeros_like(sorted_lookup)
+            print("loading path information")
+            for i in tqdm(range(0, sorted_lookup.shape[0], chunk_size)):
+                # track duplicate info
+                vals, counts = np.unique(sorted_lookup[i:i + chunk_size], return_counts=True)
+                arr = volume_lookup_dset[vals]
+                path_ind[i:i + chunk_size] = np.repeat(arr, counts)
+
+        # return to intended order
+        path_ind = path_ind[view_unsorter]
+
+        paths = paths[path_ind, :]
+        return paths, path_ind
 
     def project_volume(self, volume, kind="max"):
         """ Create a maximum projection view of the volume
@@ -422,16 +438,13 @@ class Isocortex3dProjector(Isocortex2dProjector):
 
             self.path_layer_thickness = {}
 
-            with h5py.File(surface_paths_file, "r") as f:
-                volume_lookup = f["volume lookup"][:]
-
             with h5py.File(streamline_layer_thickness_file, "r") as f:
                 for k in self.ISOCORTEX_LAYER_KEYS:
                     self.path_layer_thickness[k] = f[k][:]
 
                     # Select and order paths to match the projection.
                     self.path_layer_thickness[k] = self.path_layer_thickness[k][
-                        volume_lookup.flat[self.view_lookup[:, 1]], :]
+                        self.path_ordering, :]
 
     def project_volume(self, volume, thickness_type=None):
         """ Create a flattened slab view of the volume.
@@ -915,8 +928,7 @@ class CcfDepthProjector:
         self.surface_paths_file = surface_paths_file
         with h5py.File(surface_paths_file, "r") as path_f:
             self.paths = path_f["paths"][:]
-            self.volume_lookup = path_f["volume lookup"][:]
-        self.volume_shape = self.volume_lookup.shape
+            self.volume_shape = tuple(path_f['volume lookup flat'].attrs['original shape'])
 
         with h5py.File(closest_surface_voxel_reference_file, "r") as f:
             closest_dset = f["closest surface voxel"]
@@ -968,7 +980,7 @@ class CcfDepthProjector:
 
         full_thickness_voxels = self.paths.shape[1]
         depth = []
-        path_inds = self.volume_lookup.flat[matching_surface_voxel_ind]
+        path_inds = self._path_lookup_chunked(matching_surface_voxel_ind)
         for i in range(matching_surface_voxel_ind.shape[0]):
             # Get 3D coordinates of voxels of nearest path
 
@@ -1030,6 +1042,26 @@ class CcfDepthProjector:
         else:
             return depth
 
+    def _path_lookup_chunked(self, indices, chunk_size=1000):
+        sorter = np.argsort(indices)
+        unsorter = np.argsort(sorter)
+        sorted_indices = indices[sorter]
+
+        with h5py.File(self.surface_paths_file) as f:
+            volume_lookup_dset = f["volume lookup flat"]
+
+            path_ind = np.zeros_like(sorted_indices)
+            print("loading path information")
+            for i in tqdm(range(0, sorted_indices.shape[0], chunk_size)):
+                # track duplicate info
+                vals, counts = np.unique(sorted_indices[i:i + chunk_size], return_counts=True)
+                arr = volume_lookup_dset[vals]
+                path_ind[i:i + chunk_size] = np.repeat(arr, counts)
+
+        # re-sort
+        path_ind = path_ind[unsorter]
+
+        return path_ind
 
 def _matching_surface_voxel_indices(voxel_inds, matching_voxel_lookup):
     """ Finds matching (flattened) voxels in lookup. Missing values return 0."""
