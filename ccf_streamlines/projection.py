@@ -11,7 +11,7 @@ from scipy.spatial.distance import cdist
 
 
 class Isocortex2dProjector:
-    """ 2D projection of the common cortical framework
+    """ 2D projection of common cortical framework volumes
 
     Parameters
     ----------
@@ -20,9 +20,6 @@ class Isocortex2dProjector:
     surface_paths_file : str
         File path to an HDF5 file containing information about the paths between
         the top and bottom of cortex.
-    closest_surface_voxel_reference_file : str, optional
-        File path to an HDF5 file containing information about the closest
-        streamlines for voxels within the isocortex.
     hemisphere : {"both", "left", "right"}
         Whether to create a final projection with both hemispheres (default)
         or just left or right.
@@ -37,7 +34,6 @@ class Isocortex2dProjector:
     def __init__(self,
         projection_file,
         surface_paths_file,
-        closest_surface_voxel_reference_file=None,
         hemisphere="both",
         view_space_for_other_hemisphere=False,
     ):
@@ -66,16 +62,6 @@ class Isocortex2dProjector:
         logging.info("Loading surface path file")
         self.surface_paths_file = surface_paths_file
         self.paths, self.path_ordering = self._load_and_sort_paths(surface_paths_file)
-
-        # Load the closest surface voxel reference file, if provided
-        if closest_surface_voxel_reference_file is not None:
-            logging.info("Loading closest surface reference file")
-            with h5py.File(closest_surface_voxel_reference_file, "r") as f:
-                closest_dset = f["closest surface voxel"]
-                self.closest_surface_voxels = closest_dset[:]
-        else:
-            self.closest_surface_voxels = None
-        print("done")
 
     def _load_and_sort_paths(self, surface_paths_file):
         with h5py.File(surface_paths_file, "r") as path_f:
@@ -184,127 +170,6 @@ class Isocortex2dProjector:
 
         return projected_volume
 
-    def project_coordinates(self, coords, scale="voxels", combine_hemispheres=False):
-        """ Project set of coordinates to the 2D view
-
-        Accuracy is at the voxel level.
-
-        Parameters
-        ----------
-        coords : array
-            3D spatial coordinates, in microns
-        scale : {"voxels", "microns"}
-            Scale for projected coordinates. For ease of overlay on projected
-            images, use "voxels". For actual distances, use "microns".
-        combine_hemispheres : bool, optional
-            If False (default), only return coordinates from the selected
-            hemisphere (left or right) - other coordinates will be np.nan.
-            If True, reflects coordinates from the other hemisphere to the
-            selected hemisphere.
-            Not used if the Isocortex2dProjector's `hemisphere` parameter is
-            set to "both".
-
-        Returns
-        -------
-        projected_coords : array
-            2D projected coordinates, in voxels or microns (depending on `scale`)
-        """
-        if scale not in {"voxels", "microns"}:
-            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
-
-        projected_coords, _, _ = self._get_projected_coordinates_and_surface_voxels(coords, combine_hemispheres)
-        if scale == "microns":
-            # first dimension is left-right (z in CCF),
-            # second dimension is anterior-posterior (x in CCF)
-            return projected_coords[0] * self.resolution[2], projected_coords[1] * self.resolution[0]
-        else:
-            return projected_coords
-
-    def _get_projected_coordinates_and_surface_voxels(self, coords, combine_hemispheres):
-        if self.closest_surface_voxels is None:
-            raise ValueError("Must specify closest surface reference file to project coordinates")
-
-        # Find the voxels containing the coordinates
-        orig_voxels = coordinates_to_voxels(coords, resolution=self.resolution)
-        voxels = orig_voxels.copy()
-
-        # Reflect voxels in other hemisphere to projected hemisphere.
-        # Projected hemisphere is in lower half of z-dimension (aka left)
-        # Closest voxels reference only exists for left hemisphere
-        z_size = self.volume_shape[2]
-        z_midline = z_size / 2
-        voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
-
-        # Find the surface voxels that best match the voxels
-        voxel_inds = np.ravel_multi_index(
-            tuple(voxels[:, i] for i in range(voxels.shape[1])),
-            self.volume_shape
-        )
-        matching_surface_voxel_ind = _matching_surface_voxel_indices(
-            voxel_inds,
-            self.closest_surface_voxels)
-
-        # Find the flattened projection indices for those surface voxels
-        projected_ind = np.zeros_like(voxel_inds, dtype=int)
-        for i in range(projected_ind.shape[0]):
-            matching_lookups = self.view_lookup[
-                self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0]
-            if len(matching_lookups) == 0:
-                # cannot find surface location for this coordinate
-                # use sentinel value of -1 to indicate that it's missing
-                projected_ind[i] = -1
-            else:
-                projected_ind[i] = matching_lookups[0]
-
-        # Convert the flattened indices to 2D coordinates
-        projected_coords_not_missing = np.unravel_index(
-            projected_ind[projected_ind != -1],
-            self.view_size
-        )
-
-        projected_coords_x = np.zeros_like(projected_ind, dtype=float)
-        projected_coords_y = np.zeros_like(projected_ind, dtype=float)
-        projected_coords_x[projected_ind != -1] = projected_coords_not_missing[0]
-        projected_coords_x[projected_ind == -1] = np.nan
-        projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1]
-        projected_coords_y[projected_ind == -1] = np.nan
-
-        if self.hemisphere == "both":
-            # need to separate the left and right coordinates & flip the ones
-            # that should be on the right
-            max_x = self.view_size[0] - self.view_space_for_other_hemisphere
-            voxels_on_right = orig_voxels[:, 2] > z_midline
-
-            # Need to double max_x because there's space for both hemispheres
-            projected_coords_x[voxels_on_right] = 2 * max_x - projected_coords_x[voxels_on_right]
-        elif combine_hemispheres:
-            if self.hemisphere == "right":
-                # everything is already on the left hemisphere, so if we
-                # want it on the right instead, need to reflect the first dimension
-                max_x = self.view_size[0] - self.view_space_for_other_hemisphere
-                projected_coords_x = max_x - projected_coords_x
-        else:
-            voxels_on_right = orig_voxels[:, 2] > z_midline
-            if self.hemisphere == "left":
-                # already on the left, just need to remove (set to nan) the
-                # ones on the right
-                 projected_coords_x[voxels_on_right] = np.nan
-                 projected_coords_y[voxels_on_right] = np.nan
-            elif self.hemisphere == "right":
-                # flip coordinates to the right and set the ones on the left
-                # to nan
-                max_x = self.view_size[0] - self.view_space_for_other_hemisphere
-                projected_coords_x = max_x - projected_coords_x
-
-                projected_coords_x[~voxels_on_right] = np.nan
-                projected_coords_y[~voxels_on_right] = np.nan
-
-        return (
-            (projected_coords_x, projected_coords_y),
-            voxels,
-            matching_surface_voxel_ind,
-        )
-
     def streamline_for_voxel(self, voxel):
         """ Find the streamline that is closest to the specified voxel
 
@@ -383,9 +248,6 @@ class Isocortex3dProjector(Isocortex2dProjector):
     streamline_layer_thickness_file : str, optional
         Default None. File path to an HDF5 file containing information about
         the layer thicknesses per streamline.
-    closest_surface_voxel_reference_file : str, optional
-        File path to an HDF5 file containing information about the closest
-        streamlines for voxels within the isocortex.
     hemisphere : {"both", "left", "right"}
         Whether to create a final projection with both hemispheres (default)
         or just left or right.
@@ -411,14 +273,12 @@ class Isocortex3dProjector(Isocortex2dProjector):
         thickness_type="unnormalized",
         layer_thicknesses=None,
         streamline_layer_thickness_file=None,
-        closest_surface_voxel_reference_file=None,
         hemisphere="both",
         view_space_for_other_hemisphere=False,
     ):
         super().__init__(
             projection_file,
             surface_paths_file,
-            closest_surface_voxel_reference_file,
             hemisphere,
             view_space_for_other_hemisphere,
         )
@@ -664,107 +524,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
             for k, t in self.layer_thicknesses.items()}
         return ref_thickness_voxels
 
-    def project_coordinates(self, coords, scale="voxels", thickness_type=None,
-        combine_hemispheres=False):
-        """ Project set of coordinates to the flattened slab
 
-        Accuracy is at the voxel level.
-
-        Parameters
-        ----------
-        coords : array
-            3D spatial coordinates, in microns
-        scale : {"voxels", "microns"}
-            Scale for projected coordinates. For ease of overlay on projected
-            images, use "voxels". For actual distances, use "microns".
-        thickness_type : {None, "unnormalized", "normalized_full", "normalized_layers"}, optional
-            Optional override of initial thickness type
-        combine_hemispheres : bool, optional
-            If False (default), only return coordinates from the selected
-            hemisphere (left or right). If True, reflects coordinates from the
-            other hemisphere to the selected hemisphere. Not used if the
-            instance's hemisphere parameter is "both".
-
-        Returns
-        -------
-        projected_coords : array
-            3D projected coordinates
-        """
-        if thickness_type is None:
-            thickness_type = self.thickness_type
-
-        if scale not in {"voxels", "microns"}:
-            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
-
-        projected_2d_coords, voxels, matching_surface_voxel_ind = self._get_projected_coordinates_and_surface_voxels(coords, combine_hemispheres)
-
-        full_thickness_voxels = self.paths.shape[1]
-        depth = []
-        for i in range(matching_surface_voxel_ind.shape[0]):
-            # Get 3D coordinates of voxels of nearest path
-
-            path_idx = np.flatnonzero(self.view_lookup[:, 1] == matching_surface_voxel_ind[i])
-            if len(path_idx) == 0:
-                # No matching path in lookup - cannot find depth
-                depth.append(np.nan)
-                continue
-            else:
-                path_idx = path_idx[0]
-            matching_path = self.paths[path_idx, :]
-            matching_path = matching_path[matching_path > 0]
-            matching_path_voxels = np.unravel_index(
-                matching_path, self.volume_shape)
-            matching_path_voxels = np.array(matching_path_voxels).T
-
-            # Find voxel on path closest to the coordinate's voxel
-            dist_to_path = cdist(voxels[i, :][np.newaxis, :], matching_path_voxels)
-            min_dist_idx = np.argmin(dist_to_path)
-
-            # Calculate the depth
-            if thickness_type == "unnormalized":
-                depth.append(min_dist_idx)
-            elif thickness_type == "normalized_full":
-                depth.append(min_dist_idx / len(matching_path) * full_thickness_voxels)
-            elif thickness_type == "normalized_layers":
-                frac_along_path = min_dist_idx / len(matching_path)
-                # Figure out how long the path is
-                path_thickness = 0
-                for k in self.ISOCORTEX_LAYER_KEYS:
-                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
-                    path_thickness += pl_thick
-                depth_in_path = frac_along_path * path_thickness
-
-                ref_layer_top = 0
-                for k in self.ISOCORTEX_LAYER_KEYS:
-                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
-                    if pl_start == 0 and pl_end == 0:
-                        # Layer not present - skip it
-                        continue
-                    if depth_in_path <= pl_end:
-                        fraction_through_layer = (depth_in_path - pl_start) / (pl_end - pl_start)
-                        depth.append(fraction_through_layer * self.layer_thicknesses[k] + ref_layer_top)
-                        break
-                    else:
-                        ref_layer_top += self.layer_thicknesses[k]
-
-        if thickness_type == "normalized_layers":
-            ref_total_thickness = np.sum(list(self.layer_thicknesses.values()))
-            depth = np.array(depth) / ref_total_thickness * full_thickness_voxels
-        else:
-            depth = np.array(depth)
-
-        if scale == "microns":
-            if thickness_type == "normalized_layers":
-                depth_microns = depth * ref_total_thickness / full_thickness_voxels
-            else:
-                depth_microns = depth * self.resolution[1]
-            return (
-                projected_2d_coords[0] * self.resolution[2],
-                projected_2d_coords[1] * self.resolution[0],
-                depth_microns
-            )
-        else:
-            return projected_2d_coords[0], projected_2d_coords[1], depth
 
 
 class BoundaryFinder:
@@ -884,8 +644,10 @@ class BoundaryFinder:
         return boundaries
 
 
-class CcfDepthProjector:
-    """" Class for projecting CCF coordinates to determine depth from pia
+class IsocortexCoordinateProjector:
+    """" Class for projecting CCF coordinates to flattened representation.
+
+    Can be used without a 2-D view to obtain only depth from pia values
 
     Parameters
     ----------
@@ -895,14 +657,18 @@ class CcfDepthProjector:
     closest_surface_voxel_reference_file : str
         File path to a HDF5 file containing information about the closest
         streamlines for voxels within the isocortex.
-    layer_thicknesses : dict
+    layer_thicknesses : dict, optional
         Default None. Dictionary of layer thicknesses. Only used if
-        `thickness_type` is `normalized_layers`.
-    streamline_layer_thickness_file : str
+        `thickness_type` in methods is `normalized_layers`.
+    streamline_layer_thickness_file : str, optional
         Default None. File path to an HDF5 file containing information about
-        the layer thicknesses per streamline.
+        the layer thicknesses per streamline. Only used if
+        `thickness_type` in methods is `normalized_layers`.
     resolution : tuple, default (10, 10, 10)
         3-tuple of voxel dimensions in microns
+    projection_file : str, optional
+        File path to an HDF5 file containing the 2D projection information.
+        If None (default), only depth information can be obtained.
     """
 
     ISOCORTEX_LAYER_KEYS = [
@@ -917,9 +683,10 @@ class CcfDepthProjector:
     def __init__(self,
         surface_paths_file,
         closest_surface_voxel_reference_file,
-        layer_thicknesses,
-        streamline_layer_thickness_file,
-        resolution=(10, 10, 10)):
+        layer_thicknesses=None,
+        streamline_layer_thickness_file=None,
+        resolution=(10, 10, 10),
+        projection_file=None):
 
         self.layer_thicknesses = layer_thicknesses
 
@@ -935,13 +702,98 @@ class CcfDepthProjector:
             self.closest_surface_voxels = closest_dset[:]
 
         self.path_layer_thickness = {}
-        with h5py.File(streamline_layer_thickness_file, "r") as f:
-            for k in self.ISOCORTEX_LAYER_KEYS:
-                self.path_layer_thickness[k] = f[k][:]
+
+        if streamline_layer_thickness_file is not None:
+            with h5py.File(streamline_layer_thickness_file, "r") as f:
+                for k in self.ISOCORTEX_LAYER_KEYS:
+                    self.path_layer_thickness[k] = f[k][:]
+        else:
+            self.path_layer_thickness = None
+
+        if projection_file is not None:
+            with h5py.File(projection_file, "r") as proj_f:
+                self.view_lookup = proj_f["view lookup"][:]
+                self.view_size = proj_f.attrs["view size"][:]
+
 
         self.resolution = resolution
 
-    def ccf_depths(self, coords, thickness_type='normalized_layers', scale='voxels'):
+    def project_coordinates(self,
+        coords,
+        scale="voxels",
+        thickness_type="unnormalized",
+        hemisphere="both",
+        view_space_for_other_hemisphere=False,
+        drop_voxels_outside_view_streamlines=False
+        ):
+        """ Project set of coordinates to the flattened slab
+
+        Accuracy is at the voxel level.
+
+        Parameters
+        ----------
+        coords : (N, 3) array
+            3D spatial coordinates, in microns
+        scale : {"voxels", "microns"}
+            Scale for projected coordinates. For ease of overlay on projected
+            images, use "voxels". For actual distances, use "microns".
+        thickness_type : {"unnormalized", "normalized_full", "normalized_layers"}
+            Type of thickness normalization. If 'unnormalized', the thickness
+            varies across the projection according to the length of the streamline.
+            If 'normalized_full', the thickness (between pia and white matter) is
+            consistent everywhere, but layer thicknesses can vary. If
+            'normalized_layers', layer thicknesses are consistent everywhere. Layers
+            that are not present in a particular region are empty in the
+            projection. Therefore, coordinates that are near each other in actual
+            space may end up appearing further separated if there is a "missing"
+            layer between them.
+        hemisphere : {"both", "left", "right"}
+            If "both" (default), keep coordinates on original hemispheres.
+            Otherwise, reflect all cells onto either left or right hemisphere,
+            respectively.
+        view_space_for_other_hemisphere : bool or int, optional
+            If False (default), view is used as-is. If True, view is assumed to have
+            the right half reserved for the other hemisphere, so that returning
+            both hemispheres will result in a projection the size of the original
+            view. If an integer of value `n`, the right-most `n` voxels will be
+            removed before combining both hemisphere.
+        drop_voxels_outside_view_streamlines : bool, default False
+            Whether to set x-y coordinates of voxels not within streamlines
+            used in 2-D view to NaN. If False, the nearest streamline within
+            the view will be used instead.
+
+        Returns
+        -------
+        projected_coords : (N, 3) array
+            3D flattened projected coordinates
+        """
+        if scale not in {"voxels", "microns"}:
+            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
+        if hemisphere not in {"both", "right", "left"}:
+            raise ValueError(f"`hemisphere` must be 'both', 'right', or 'left'; was {hemisphere}")
+
+        if view_space_for_other_hemisphere:
+            if isinstance(view_space_for_other_hemisphere, bool):
+                view_space_for_other_hemisphere = self.view_size[0] // 2
+        else:
+            view_space_for_other_hemisphere = 0
+
+        voxels, orig_voxels, matching_surface_voxel_ind = self._get_collapsed_voxels_and_surface_voxels(coords)
+
+        projected_2d_coords = self._calculate_2d_coordinates(
+            voxels,
+            orig_voxels,
+            matching_surface_voxel_ind,
+            scale,
+            hemisphere,
+            view_space_for_other_hemisphere,
+            drop_voxels_outside_view_streamlines
+        )
+        depths = self._calculate_depths(voxels, matching_surface_voxel_ind, thickness_type, scale)
+
+        return np.array([projected_2d_coords[0], projected_2d_coords[1], depths]).T
+
+    def ccf_depths(self, coords, thickness_type='unnormalized', scale='voxels'):
         """ Determine depths of set of CCF coordinates
 
         Accuracy is at the voxel level.
@@ -950,8 +802,16 @@ class CcfDepthProjector:
         ----------
         coords : array
             3D spatial coordinates, in microns
-        thickness_type : {None, "unnormalized", "normalized_full", "normalized_layers"}, optional
-            Optional override of initial thickness type
+        thickness_type : {"unnormalized", "normalized_full", "normalized_layers"}
+            Type of thickness normalization. If 'unnormalized', the thickness
+            varies across the projection according to the length of the streamline.
+            If 'normalized_full', the thickness (between pia and white matter) is
+            consistent everywhere, but layer thicknesses can vary. If
+            'normalized_layers', layer thicknesses are consistent everywhere. Layers
+            that are not present in a particular region are empty in the
+            projection. Therefore, coordinates that are near each other in actual
+            space may end up appearing further separated if there is a "missing"
+            layer between them.
         scale : {"voxels", "microns"}
             Scale for projected coordinates. For ease of overlay on projected
             images, use "voxels". For actual distances, use "microns".
@@ -961,23 +821,13 @@ class CcfDepthProjector:
         depths : array
             Depths from pia
         """
-        voxels = coordinates_to_voxels(coords, resolution=self.resolution)
+        if scale not in {"voxels", "microns"}:
+            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
 
-        # Reflect voxels to left hemisphere since closest surface voxels are only
-        # defined on left side
-        z_size = self.volume_shape[2]
-        z_midline = z_size / 2
-        voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
+        voxels, _, matching_surface_voxel_ind = self._get_collapsed_voxels_and_surface_voxels(coords)
+        return self._calculate_depths(voxels, matching_surface_voxel_ind, thickness_type=thickness_type, scale=scale)
 
-        # Find the surface voxels that best match the voxels
-        voxel_inds = np.ravel_multi_index(
-            tuple(voxels[:, i] for i in range(voxels.shape[1])),
-            self.volume_shape
-        )
-        matching_surface_voxel_ind = _matching_surface_voxel_indices(
-            voxel_inds,
-            self.closest_surface_voxels)
-
+    def _calculate_depths(self, voxels, matching_surface_voxel_ind, thickness_type='normalized_layers', scale='voxels'):
         full_thickness_voxels = self.paths.shape[1]
         depth = []
         path_inds = self._path_lookup_chunked(matching_surface_voxel_ind)
@@ -1062,6 +912,111 @@ class CcfDepthProjector:
         path_ind = path_ind[unsorter]
 
         return path_ind
+
+
+    def _get_collapsed_voxels_and_surface_voxels(self, coords):
+        # Convert coordinates to voxels
+        orig_voxels = coordinates_to_voxels(coords, resolution=self.resolution)
+        voxels = orig_voxels.copy()
+
+        # Reflect voxels to left hemisphere since closest surface voxels are only
+        # defined on left side
+        z_size = self.volume_shape[2]
+        z_midline = z_size / 2
+        voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
+
+        # Find the surface voxels that best match the voxels
+        voxel_inds = np.ravel_multi_index(
+            tuple(voxels[:, i] for i in range(voxels.shape[1])),
+            self.volume_shape
+        )
+        matching_surface_voxel_ind = _matching_surface_voxel_indices(
+            voxel_inds,
+            self.closest_surface_voxels)
+
+        return voxels, orig_voxels, matching_surface_voxel_ind
+
+    def _calculate_2d_coordinates(self,
+        voxels,
+        orig_voxels,
+        matching_surface_voxel_ind,
+        scale,
+        hemisphere,
+        view_space_for_other_hemisphere,
+        drop_voxels_outside_view_streamlines=False,
+        ):
+
+        # Find the flattened projection indices for matching surface voxels
+        projected_ind = np.zeros_like(matching_surface_voxel_ind, dtype=int)
+        for i in range(projected_ind.shape[0]):
+            matching_lookups = self.view_lookup[
+                self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0]
+            if len(matching_lookups) == 0:
+                # cannot find surface location for this coordinate
+                # use sentinel value of -1 to indicate that it's missing
+                projected_ind[i] = -1
+            else:
+                projected_ind[i] = matching_lookups[0]
+
+        if not drop_voxels_outside_view_streamlines:
+            # Try to find nearest streamlines for surface voxels not used in view
+            surface_voxels_to_find = matching_surface_voxel_ind[
+                (matching_surface_voxel_ind != 0) & (projected_ind == -1)
+            ]
+            coords_to_find = np.unravel_index(
+                surface_voxels_to_find,
+                self.volume_shape)
+            coords_to_find = np.array(coords_to_find).T
+
+            used_streamline_coords = np.unravel_index(
+                self.view_lookup[:, 1],
+                self.volume_shape)
+            used_streamline_coords = np.array(used_streamline_coords).T
+
+            dist_to_used = cdist(coords_to_find, used_streamline_coords)
+            min_dist_idx = np.argmin(dist_to_used, axis=1)
+            projected_ind[
+                (matching_surface_voxel_ind != 0) & (projected_ind == -1)
+            ] = self.view_lookup[min_dist_idx, 0]
+
+        # Convert the flattened indices to 2D coordinates
+        projected_coords_not_missing = np.unravel_index(
+            projected_ind[projected_ind != -1],
+            self.view_size
+        )
+
+        projected_coords_x = np.zeros_like(projected_ind, dtype=float)
+        projected_coords_y = np.zeros_like(projected_ind, dtype=float)
+        projected_coords_x[projected_ind != -1] = projected_coords_not_missing[0]
+        projected_coords_x[projected_ind == -1] = np.nan
+        projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1]
+        projected_coords_y[projected_ind == -1] = np.nan
+
+        if hemisphere == "both":
+            # need to separate the left and right coordinates & flip the ones
+            # that should be on the right
+            z_midline = self.volume_shape[2] / 2
+            max_x = self.view_size[0] - view_space_for_other_hemisphere
+            voxels_on_right = orig_voxels[:, 2] > z_midline
+
+            # Need to double max_x because there's space for both hemispheres
+            projected_coords_x[voxels_on_right] = 2 * max_x - projected_coords_x[voxels_on_right]
+        elif hemisphere == "right":
+                # everything is already on the left hemisphere, so if we
+                # want it on the right instead, need to reflect the first dimension
+                max_x = self.view_size[0] - view_space_for_other_hemisphere
+                projected_coords_x = max_x - projected_coords_x
+        elif hemisphere == "left":
+            # everything is already on the left hemisphere
+            pass
+
+        if scale == "microns":
+            # first dimension is left-right (z in CCF),
+            # second dimension is anterior-posterior (x in CCF)
+            return projected_coords_x * self.resolution[2], projected_coords_y * self.resolution[0]
+        else:
+            return projected_coords_x, projected_coords_y
+
 
 def _matching_surface_voxel_indices(voxel_inds, matching_voxel_lookup):
     """ Finds matching (flattened) voxels in lookup. Missing values return 0."""
