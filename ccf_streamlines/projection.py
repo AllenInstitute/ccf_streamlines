@@ -759,7 +759,7 @@ class IsocortexCoordinateProjector:
             removed before combining both hemisphere.
         drop_voxels_outside_view_streamlines : bool, default False
             Whether to set x-y coordinates of voxels not within streamlines
-            used in 2-D view to NaN. If False, the nearest streamline within
+            used in 2-D view to NaN. If False (default), the nearest streamline within
             the view will be used instead.
 
         Returns
