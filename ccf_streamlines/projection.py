@@ -869,6 +869,7 @@ class IsocortexCoordinateProjector:
                     pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
                     if pl_start == 0 and pl_end == 0:
                         # Layer not present - skip it
+                        ref_layer_top += self.layer_thicknesses[k]
                         continue
                     if depth_in_path <= pl_end:
                         fraction_through_layer = (depth_in_path - pl_start) / (pl_end - pl_start)
