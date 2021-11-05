@@ -793,7 +793,7 @@ class IsocortexCoordinateProjector:
 
         return np.array([projected_2d_coords[0], projected_2d_coords[1], depths]).T
 
-    def ccf_depths(self, coords, thickness_type='unnormalized', scale='voxels'):
+    def project_depths(self, coords, thickness_type='unnormalized', scale='voxels'):
         """ Determine depths of set of CCF coordinates
 
         Accuracy is at the voxel level.
