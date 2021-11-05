@@ -187,7 +187,7 @@ class Isocortex2dProjector:
             tuple(voxel),
             self.volume_shape
         )
-        matching_surface_voxel_ind = _matching_surface_voxel_indices(
+        matching_surface_voxel_ind = _matching_voxel_indices(
             voxel_ind,
             self.closest_surface_voxels)[0]
         path_ind = np.flatnonzero(self.view_lookup[:, 1] == matching_surface_voxel_ind)
@@ -931,7 +931,7 @@ class IsocortexCoordinateProjector:
             tuple(voxels[:, i] for i in range(voxels.shape[1])),
             self.volume_shape
         )
-        matching_surface_voxel_ind = _matching_surface_voxel_indices(
+        matching_surface_voxel_ind = _matching_voxel_indices(
             voxel_inds,
             self.closest_surface_voxels)
 
@@ -949,15 +949,24 @@ class IsocortexCoordinateProjector:
 
         # Find the flattened projection indices for matching surface voxels
         projected_ind = np.zeros_like(matching_surface_voxel_ind, dtype=int)
-        for i in range(projected_ind.shape[0]):
-            matching_lookups = self.view_lookup[
-                self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0]
-            if len(matching_lookups) == 0:
-                # cannot find surface location for this coordinate
-                # use sentinel value of -1 to indicate that it's missing
-                projected_ind[i] = -1
-            else:
-                projected_ind[i] = matching_lookups[0]
+        sorter = np.argsort(self.view_lookup[:, 1])
+        projected_ind = _matching_voxel_indices(
+            matching_surface_voxel_ind,
+            self.view_lookup,
+            lookup_ind=1,
+            ref_ind=0,
+            missing_value=-1,
+            sorter=sorter
+        )
+#         for i in range(projected_ind.shape[0]):
+#             matching_lookups = self.view_lookup[
+#                 self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0]
+#             if len(matching_lookups) == 0:
+#                 # cannot find surface location for this coordinate
+#                 # use sentinel value of -1 to indicate that it's missing
+#                 projected_ind[i] = -1
+#             else:
+#                 projected_ind[i] = matching_lookups[0]
 
         if not drop_voxels_outside_view_streamlines:
             # Try to find nearest streamlines for surface voxels not used in view
@@ -1019,13 +1028,23 @@ class IsocortexCoordinateProjector:
             return projected_coords_x, projected_coords_y
 
 
-def _matching_surface_voxel_indices(voxel_inds, matching_voxel_lookup):
-    """ Finds matching (flattened) voxels in lookup. Missing values return 0."""
-    matching_surface_voxel_ind = np.zeros_like(voxel_inds, dtype=int)
-    has_match = np.isin(voxel_inds, matching_voxel_lookup[:, 0])
-    lookup_ind = np.searchsorted(
-        matching_voxel_lookup[:, 0],
-        voxel_inds[has_match]
+def _matching_voxel_indices(
+    voxel_inds,
+    matching_voxel_lookup,
+    lookup_ind=0,
+    ref_ind=1,
+    missing_value=0,
+    sorter=None):
+    """ Finds matching (flattened) voxels in lookup. Missing values return `missing_value`."""
+    matching_voxel_ind = np.ones_like(voxel_inds, dtype=int) * missing_value
+    has_match = np.isin(voxel_inds, matching_voxel_lookup[:, lookup_ind])
+    lookup_results_ind = np.searchsorted(
+        matching_voxel_lookup[:, lookup_ind],
+        voxel_inds[has_match],
+        sorter=sorter
     )
-    matching_surface_voxel_ind[has_match] = matching_voxel_lookup[lookup_ind, 1]
-    return matching_surface_voxel_ind
+    if sorter is not None:
+        matching_voxel_ind[has_match] = matching_voxel_lookup[sorter, ref_ind][lookup_results_ind]
+    else:
+        matching_voxel_ind[has_match] = matching_voxel_lookup[lookup_results_ind, ref_ind]
+    return matching_voxel_ind
