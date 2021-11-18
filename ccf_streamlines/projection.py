@@ -563,24 +563,8 @@ class BoundaryFinder:
             Dictionary of region boundary coordinates with region acronyms
             as keys.
         """
-        if hemisphere not in {"left", "left_for_both", "right", "right_for_both"}:
-            raise ValueError(f"`hemisphere` is {hemisphere}; must be left, right, or right_for_both")
-
-        if view_space_for_other_hemisphere:
-            if isinstance(view_space_for_other_hemisphere, bool):
-                view_space_for_other_hemisphere = self.proj_atlas.shape[0] // 2
-        else:
-            view_space_for_other_hemisphere = 0
-
-        if region_acronyms is None:
-            unique_entries = np.unique(self.proj_atlas).tolist()
-            unique_entries.remove(0) # 0 is defined as not a structure
-            region_acronyms = self.labels_df.loc[unique_entries, "acronym"].tolist()
-        else:
-            label_acronym_set = set(self.labels_df["acronym"].tolist())
-            for acronym in region_acronyms:
-                if acronym not in label_acronym_set:
-                    raise ValueError(f"Region acronym {acronym} does not have an index")
+        region_acronyms, hemisphere, view_space_for_other_hemisphere  = self._validate_inputs(
+            region_acronyms, hemisphere, view_space_for_other_hemisphere)
 
         boundaries = {}
         for acronym in region_acronyms:
@@ -613,6 +597,61 @@ class BoundaryFinder:
 
         return boundaries
 
+    def region_masks(self,
+        region_acronyms=None,
+        hemisphere="left",
+        view_space_for_other_hemisphere=False):
+
+        region_acronyms, hemisphere, view_space_for_other_hemisphere  = self._validate_inputs(
+            region_acronyms, hemisphere, view_space_for_other_hemisphere)
+
+        masks = {}
+        for acronym in region_acronyms:
+            ind = self.labels_df.index[self.labels_df["acronym"] == acronym][0]
+            region_raster = np.zeros_like(self.proj_atlas).astype(bool)
+            region_raster[self.proj_atlas == ind] = True
+
+            region_raster = region_raster[:-view_space_for_other_hemisphere, :]
+            if hemisphere == "left":
+                pass
+            elif hemisphere == "right":
+                region_raster = region_raster[::-1, :]
+            elif hemisphere == "left_for_both":
+                empty_side = np.zeros_like(region_raster)
+                region_raster = np.vstack([region_raster, empty_side])
+            elif hemisphere == "right_for_both":
+                region_raster = region_raster[::-1, :]
+                empty_side = np.zeros_like(region_raster)
+                region_raster = np.vstack([empty_side, region_raster])
+            masks[acronym] = region_raster
+
+        return masks
+
+    def _validate_inputs(self,
+        region_acronyms,
+        hemisphere,
+        view_space_for_other_hemisphere):
+
+        if hemisphere not in {"left", "left_for_both", "right", "right_for_both"}:
+            raise ValueError(f"`hemisphere` is {hemisphere}; must be left, right, or right_for_both")
+
+        if view_space_for_other_hemisphere:
+            if isinstance(view_space_for_other_hemisphere, bool):
+                view_space_for_other_hemisphere = self.proj_atlas.shape[0] // 2
+        else:
+            view_space_for_other_hemisphere = 0
+
+        if region_acronyms is None:
+            unique_entries = np.unique(self.proj_atlas).tolist()
+            unique_entries.remove(0) # 0 is defined as not a structure
+            region_acronyms = self.labels_df.loc[unique_entries, "acronym"].tolist()
+        else:
+            label_acronym_set = set(self.labels_df["acronym"].tolist())
+            for acronym in region_acronyms:
+                if acronym not in label_acronym_set:
+                    raise ValueError(f"Region acronym {acronym} does not have an index")
+
+        return region_acronyms, hemisphere, view_space_for_other_hemisphere
 
 class IsocortexCoordinateProjector:
     """" Class for projecting CCF coordinates to flattened representation.
