@@ -22,5 +22,8 @@ def coordinates_to_voxels(coords, resolution=(10, 10, 10)):
             f"second dimension of `coords` must match length of `resolution`; "
             f"{len(resolution)} != {coords.shape[1]}")
 
+    if not np.issubdtype(coords.dtype, np.number):
+        raise ValueError(f"coords must have a numeric dtype (dtype is '{coords.dtype}')")
+
     voxels = np.floor(coords / resolution).astype(int)
     return voxels
