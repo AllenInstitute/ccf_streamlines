@@ -170,36 +170,6 @@ class Isocortex2dProjector:
 
         return projected_volume
 
-    def streamline_for_voxel(self, voxel):
-        """ Find the streamline that is closest to the specified voxel
-
-        Parameters
-        ----------
-        voxel : array
-            3D coordinates (integer values) of voxel
-
-        Returns
-        -------
-        streamline : array
-            Array of flattened indices of the voxels belonging to the streamline
-        """
-        voxel_ind = np.ravel_multi_index(
-            tuple(voxel),
-            self.volume_shape
-        )
-        matching_surface_voxel_ind = _matching_voxel_indices(
-            voxel_ind,
-            self.closest_surface_voxels)[0]
-        path_ind = np.flatnonzero(self.view_lookup[:, 1] == matching_surface_voxel_ind)
-        if len(path_ind) == 0:
-            # cannot not find location for this coordinate
-            # use sentinel value of -1 to indicate that it's missing
-            logging.warning("No streamline found for voxel")
-            return None
-        else:
-            path_ind = path_ind[0]
-        return self.paths[path_ind, :]
-
     def project_path_ordered_data(self, data):
         """ Project 1D data corresponding to the list of streamlines
 
