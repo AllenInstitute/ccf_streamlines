@@ -717,10 +717,15 @@ class IsocortexCoordinateProjector:
             projection. Therefore, coordinates that are near each other in actual
             space may end up appearing further separated if there is a "missing"
             layer between them.
-        hemisphere : {"both", "left", "right"}
+        hemisphere : {"both", "both_mirrored", "left", "right"}
             If "both" (default), keep coordinates on original hemispheres.
-            Otherwise, reflect all cells onto either left or right hemisphere,
-            respectively.
+            If "both_mirrored", keep coordinates in separate hemispheres, but
+            reflect them so that the original left hemisphere becomes right, and
+            vice versa. This can be useful for putting all ipsilateral and
+            contralateral projections on the same side.
+            If "left" or "right", put all coordinates onto either left or right
+            hemisphere (respectively), reflecting those that are on the opposite
+            hemisphere to the specified one.
         view_space_for_other_hemisphere : bool or int, optional
             If False (default), view is used as-is. If True, view is assumed to have
             the right half reserved for the other hemisphere, so that returning
@@ -739,7 +744,7 @@ class IsocortexCoordinateProjector:
         """
         if scale not in {"voxels", "microns"}:
             raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
-        if hemisphere not in {"both", "right", "left"}:
+        if hemisphere not in {"both", "both_mirrored", "right", "left"}:
             raise ValueError(f"`hemisphere` must be 'both', 'right', or 'left'; was {hemisphere}")
 
         if view_space_for_other_hemisphere:
@@ -928,15 +933,6 @@ class IsocortexCoordinateProjector:
             missing_value=-1,
             sorter=sorter
         )
-#         for i in range(projected_ind.shape[0]):
-#             matching_lookups = self.view_lookup[
-#                 self.view_lookup[:, 1] == matching_surface_voxel_ind[i], 0]
-#             if len(matching_lookups) == 0:
-#                 # cannot find surface location for this coordinate
-#                 # use sentinel value of -1 to indicate that it's missing
-#                 projected_ind[i] = -1
-#             else:
-#                 projected_ind[i] = matching_lookups[0]
 
         if not drop_voxels_outside_view_streamlines:
             # Try to find nearest streamlines for surface voxels not used in view
@@ -972,7 +968,7 @@ class IsocortexCoordinateProjector:
         projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1]
         projected_coords_y[projected_ind == -1] = np.nan
 
-        if hemisphere == "both":
+        if hemisphere in ("both", "both_mirrored"):
             # need to separate the left and right coordinates & flip the ones
             # that should be on the right
             z_midline = self.volume_shape[2] / 2
@@ -981,6 +977,10 @@ class IsocortexCoordinateProjector:
 
             # Need to double max_x because there's space for both hemispheres
             projected_coords_x[voxels_on_right] = 2 * max_x - projected_coords_x[voxels_on_right]
+
+            if hemisphere == "both_mirrored":
+                # Mirror everything across hemispheres
+                projected_coords_x = 2 * max_x - projected_coords_x
         elif hemisphere == "right":
                 # everything is already on the left hemisphere, so if we
                 # want it on the right instead, need to reflect the first dimension
