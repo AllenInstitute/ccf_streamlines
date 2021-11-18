@@ -132,3 +132,5 @@ def find_topological_point_coordinates(swc_df):
     term_ids = [i for i in swc_df["id"] if i not in child_counts.index]
 
     return swc_df.set_index("id").loc[branch_ids + term_ids, ["x", "y", "z"]].values
+
+
