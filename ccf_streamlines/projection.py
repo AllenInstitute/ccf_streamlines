@@ -8,6 +8,7 @@ from ccf_streamlines.coordinates import coordinates_to_voxels
 from skimage.measure import find_contours
 from tqdm import tqdm
 from scipy.spatial.distance import cdist
+from ccf_streamlines.linestring3d import LineString3D
 
 
 class Isocortex2dProjector:
@@ -792,9 +793,10 @@ class IsocortexCoordinateProjector:
         else:
             view_space_for_other_hemisphere = 0
 
-        voxels, orig_voxels, matching_surface_voxel_ind = self._get_collapsed_voxels_and_surface_voxels(coords)
+        reflect_coords, voxels, orig_voxels, matching_surface_voxel_ind = self._get_collapsed_voxels_and_surface_voxels(coords)
 
         projected_2d_coords = self._calculate_2d_coordinates(
+            reflect_coords,
             voxels,
             orig_voxels,
             matching_surface_voxel_ind,
@@ -803,7 +805,7 @@ class IsocortexCoordinateProjector:
             view_space_for_other_hemisphere,
             drop_voxels_outside_view_streamlines
         )
-        depths = self._calculate_depths(voxels, matching_surface_voxel_ind, thickness_type, scale)
+        depths = self._calculate_depths(reflect_coords, voxels, matching_surface_voxel_ind, thickness_type, scale)
 
         return np.array([projected_2d_coords[0], projected_2d_coords[1], depths]).T
 
@@ -838,10 +840,11 @@ class IsocortexCoordinateProjector:
         if scale not in {"voxels", "microns"}:
             raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
 
-        voxels, _, matching_surface_voxel_ind = self._get_collapsed_voxels_and_surface_voxels(coords)
-        return self._calculate_depths(voxels, matching_surface_voxel_ind, thickness_type=thickness_type, scale=scale)
+        reflect_coords, voxels, _, matching_surface_voxel_ind = self._get_collapsed_voxels_and_surface_voxels(coords)
+        return self._calculate_depths(reflect_coords, voxels, matching_surface_voxel_ind, thickness_type=thickness_type, scale=scale)
 
-    def _calculate_depths(self, voxels, matching_surface_voxel_ind, thickness_type='normalized_layers', scale='voxels'):
+    def _calculate_depths(self, coords, voxels, matching_surface_voxel_ind, thickness_type='normalized_layers', scale='voxels'):
+        coords_in_voxel_scale = coords / self.resolution
         full_thickness_voxels = self.paths.shape[1]
         depth = []
         path_inds = self._path_lookup_chunked(matching_surface_voxel_ind)
@@ -860,24 +863,31 @@ class IsocortexCoordinateProjector:
                 matching_path, self.volume_shape)
             matching_path_voxels = np.array(matching_path_voxels).T
 
-            # Find voxel on path closest to the coordinate's voxel
-            dist_to_path = cdist(voxels[i, :][np.newaxis, :], matching_path_voxels)
-            min_dist_idx = np.argmin(dist_to_path)
+            # Find centers at midpoint of voxels
+            path_voxel_centers = matching_path_voxels + 0.5
 
             # Calculate the depth
             if thickness_type == "unnormalized":
-                depth.append(min_dist_idx)
+                path_line = LineString3D(path_voxel_centers)
+                depth.append(path_line.project(coords_in_voxel_scale[i, :]))
             elif thickness_type == "normalized_full":
-                depth.append(min_dist_idx / len(matching_path) * full_thickness_voxels)
+                path_line = LineString3D(path_voxel_centers)
+                depth.append(
+                     path_line.project(coords_in_voxel_scale[i, :], normalized=True)
+                     * full_thickness_voxels
+                )
             elif thickness_type == "normalized_layers":
-                frac_along_path = min_dist_idx / len(matching_path)
+#                 frac_along_path = min_dist_idx / len(matching_path)
                 # Figure out how long the path is
                 path_thickness = 0
                 for k in self.ISOCORTEX_LAYER_KEYS:
                     pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
                     path_thickness += pl_thick
-                depth_in_path = frac_along_path * path_thickness
+                # Micron scale, since path thickness reference is in microns
+                path_line = LineString3D(path_voxel_centers * self.resolution)
 
+#                 depth_in_path = frac_along_path * path_thickness
+                depth_in_path = path_line.project(coords[i, :])
                 ref_layer_top = 0
                 for k in self.ISOCORTEX_LAYER_KEYS:
                     pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
@@ -940,6 +950,11 @@ class IsocortexCoordinateProjector:
         z_midline = z_size / 2
         voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
 
+        # Also reflect coordinates
+        reflect_coords = coords.copy()
+        reflect_coords[reflect_coords[:, 2] > z_midline * self.resolution[2], 2] = z_size * self.resolution[2] - reflect_coords[reflect_coords[:, 2] > z_midline * self.resolution[2], 2]
+
+
         # Find the surface voxels that best match the voxels
         voxel_inds = np.ravel_multi_index(
             tuple(voxels[:, i] for i in range(voxels.shape[1])),
@@ -949,9 +964,10 @@ class IsocortexCoordinateProjector:
             voxel_inds,
             self.closest_surface_voxels)
 
-        return voxels, orig_voxels, matching_surface_voxel_ind
+        return reflect_coords, voxels, orig_voxels, matching_surface_voxel_ind
 
     def _calculate_2d_coordinates(self,
+        coords,
         voxels,
         orig_voxels,
         matching_surface_voxel_ind,
@@ -972,6 +988,9 @@ class IsocortexCoordinateProjector:
             missing_value=-1,
             sorter=sorter
         )
+
+        # Find the path indices for the matching surface voxels
+        path_inds = self._path_lookup_chunked(matching_surface_voxel_ind)
 
         if not drop_voxels_outside_view_streamlines:
             # Try to find nearest streamlines for surface voxels not used in view
@@ -994,17 +1013,63 @@ class IsocortexCoordinateProjector:
                 (matching_surface_voxel_ind != 0) & (projected_ind == -1)
             ] = self.view_lookup[min_dist_idx, 0]
 
+
         # Convert the flattened indices to 2D coordinates
         projected_coords_not_missing = np.unravel_index(
             projected_ind[projected_ind != -1],
             self.view_size
         )
 
+        # Get x-y offsets for each point
+        ap_offset_list = [] # anterior-posterior
+        lr_offset_list = [] # left-right
+        # Cache the rotations & rotated line strings
+        rot_cache = {}
+        rot_paths_cache = {}
+        path_starts_cache = {}
+        for c, path_idx in zip(coords[projected_ind != -1, :], path_inds[projected_ind != -1]):
+            if path_idx not in rot_cache or path_idx not in rot_paths_cache or path_idx not in path_starts_cache:
+                matching_path = self.paths[path_idx, :]
+                matching_path = matching_path[matching_path > 0]
+                matching_path_voxels = np.unravel_index(
+                    matching_path, self.volume_shape)
+                matching_path_voxels = np.array(matching_path_voxels).T
+
+                matching_path_microns = matching_path_voxels * self.resolution
+                # path centered on starting point
+                path = LineString3D(matching_path_microns - matching_path_microns[0, :])
+                path_start = matching_path_microns[0, :]
+                path_starts_cache[path_idx] = path_start
+
+                # Determine rotation to point directly down (in positive y-direction)
+                rot = path.rotation_to_vector(np.array([0, 1, 0]))
+                rot_cache[path_idx] = rot
+
+                # Rotate both path and coordinates of point
+                rot_path = LineString3D((rot @ (path.coords.T)).T)
+                rot_paths_cache[path_idx] = rot_path
+            else:
+#                 print("cache hit", path_idx)
+                path_start = path_starts_cache[path_idx]
+                rot = rot_cache[path_idx]
+                rot_path = rot_paths_cache[path_idx]
+            rot_coords = (rot @ (c - path_start).T).T
+            offset = rot_path.offset_of_point(rot_coords)
+
+            # save the offset in the x (anterior-posterior) and z (left-right)
+            # directions
+            ap_offset_list.append(offset[0])
+            lr_offset_list.append(offset[2])
+
+        # Back to voxels
+        ap_offsets = np.array(ap_offset_list) / self.resolution[0]
+        lr_offsets = np.array(lr_offset_list) / self.resolution[2]
+
         projected_coords_x = np.zeros_like(projected_ind, dtype=float)
         projected_coords_y = np.zeros_like(projected_ind, dtype=float)
-        projected_coords_x[projected_ind != -1] = projected_coords_not_missing[0]
+        projected_coords_x[projected_ind != -1] = projected_coords_not_missing[0] + lr_offsets
         projected_coords_x[projected_ind == -1] = np.nan
-        projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1]
+        projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1] + ap_offsets
         projected_coords_y[projected_ind == -1] = np.nan
 
         if hemisphere in ("both", "both_mirrored"):
