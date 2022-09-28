@@ -11,6 +11,7 @@ Welcome to ccf_streamlines's documentation!
    :caption: Contents:
 
    guide
+   data_files
    reference/index
 
 
