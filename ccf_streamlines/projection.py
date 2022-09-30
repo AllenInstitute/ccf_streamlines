@@ -832,6 +832,7 @@ class IsocortexCoordinateProjector:
             view_space_for_other_hemisphere,
             drop_voxels_outside_view_streamlines
         )
+
         depths = self._calculate_depths(reflect_coords, voxels, matching_surface_voxel_ind, thickness_type, scale)
 
         return np.array([projected_2d_coords[0], projected_2d_coords[1], depths]).T
@@ -916,6 +917,7 @@ class IsocortexCoordinateProjector:
 #                 depth_in_path = frac_along_path * path_thickness
                 depth_in_path = path_line.project(coords[i, :])
                 ref_layer_top = 0
+                appended = False
                 for k in self.ISOCORTEX_LAYER_KEYS:
                     pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
                     if pl_start == 0 and pl_end == 0:
@@ -925,9 +927,12 @@ class IsocortexCoordinateProjector:
                     if depth_in_path <= pl_end:
                         fraction_through_layer = (depth_in_path - pl_start) / (pl_end - pl_start)
                         depth.append(fraction_through_layer * self.layer_thicknesses[k] + ref_layer_top)
+                        appended = True
                         break
                     else:
                         ref_layer_top += self.layer_thicknesses[k]
+                if not appended:
+                    depth.append(np.nan)
 
         if thickness_type == "normalized_layers":
             ref_total_thickness = np.sum(list(self.layer_thicknesses.values()))
@@ -1076,7 +1081,6 @@ class IsocortexCoordinateProjector:
                 rot_path = LineString3D((rot @ (path.coords.T)).T)
                 rot_paths_cache[path_idx] = rot_path
             else:
-#                 print("cache hit", path_idx)
                 path_start = path_starts_cache[path_idx]
                 rot = rot_cache[path_idx]
                 rot_path = rot_paths_cache[path_idx]
