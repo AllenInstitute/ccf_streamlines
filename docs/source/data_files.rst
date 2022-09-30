@@ -61,6 +61,7 @@ View lookups
            :width: 400
     * - `rotated.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/view_lookup/rotated.h5>`_
       - Correspondence between view from near the top but rotated to see more of lateral isocortex and CCF volume. Can place hemispheres near each other with ``view_space_for_other_hemisphere = 'rotated'``.
+      - .. image:: /images/rotated_template.png
            :width: 400
     * - `side.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/view_lookup/side.h5>`_
       - Correspondence between view from lateral side of isocortex and CCF volume. Can place hemispheres near each other with ``view_space_for_other_hemisphere = 'side'``.
