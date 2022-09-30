@@ -812,9 +812,9 @@ class IsocortexCoordinateProjector:
                 view_space_for_other_hemisphere = self.view_size[0] // 2
             elif isinstance(view_space_for_other_hemisphere, str):
                 if view_space_for_other_hemisphere == "flatmap_butterfly":
-                    self.view_space_for_other_hemisphere = 184
+                    view_space_for_other_hemisphere = 184
                 elif view_space_for_other_hemisphere == "flatmap_dorsal":
-                    self.view_space_for_other_hemisphere = 110
+                    view_space_for_other_hemisphere = 110
                 else:
                     raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
         else:
