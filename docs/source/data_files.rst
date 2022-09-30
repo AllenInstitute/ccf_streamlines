@@ -48,7 +48,7 @@ View lookups
       - .. image:: /images/flatmap_butterfly_template.png
            :width: 400
     * - `flatmap_dorsal.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/view_lookup/flatmap_dorsal.h5>`_
-      - Correspondence between flattened map of all of isocortex and CCF volume. Can place hemispheres adjacent to each other with ``view_space_for_other_hemisphere = 'flatmap_dorsal'``.
+      - Correspondence between flattened map of all of isocortex and CCF volume. Can place hemispheres near each other with ``view_space_for_other_hemisphere = 'flatmap_dorsal'``.
       - .. image:: /images/flatmap_dorsal_template.png
            :width: 400
     * - `front.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/view_lookup/front.h5>`_
@@ -56,15 +56,14 @@ View lookups
       - .. image:: /images/front_template.png
            :width: 400
     * - `medial.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/view_lookup/medial.h5>`_
-      - Correspondence between view from medial side of isocortex and CCF volume. Need to use with ``view_space_for_other_hemisphere = False``.
+      - Correspondence between view from medial side of isocortex and CCF volume. Can place hemispheres near each other with ``view_space_for_other_hemisphere = 'medial'``.
       - .. image:: /images/medial_template.png
            :width: 400
     * - `rotated.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/view_lookup/rotated.h5>`_
-      - Correspondence between view from near the top but rotated to see more of lateral isocortex and CCF volume. Need to use with ``view_space_for_other_hemisphere = False``.
-      - .. image:: /images/rotated_template.png
+      - Correspondence between view from near the top but rotated to see more of lateral isocortex and CCF volume. Can place hemispheres near each other with ``view_space_for_other_hemisphere = 'rotated'``.
            :width: 400
     * - `side.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/view_lookup/side.h5>`_
-      - Correspondence between view from lateral side of isocortex and CCF volume. Need to use with ``view_space_for_other_hemisphere = False``.
+      - Correspondence between view from lateral side of isocortex and CCF volume. Can place hemispheres near each other with ``view_space_for_other_hemisphere = 'side'``.
       - .. image:: /images/side_template.png
            :width: 400
     * - `top.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/view_lookup/top.h5>`_

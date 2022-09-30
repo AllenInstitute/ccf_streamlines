@@ -11,6 +11,15 @@ from scipy.spatial.distance import cdist
 from ccf_streamlines.linestring3d import LineString3D
 
 
+HEMISPHERE_SPACE_VIEW_LOOKUP = {
+    "flatmap_butterfly": 184,
+    "flatmap_dorsal": 110,
+    "medial": 270,
+    "side": 270,
+    "rotated": 390,
+}
+
+
 class Isocortex2dProjector:
     """ 2D projection of common cortical framework volumes
 
@@ -24,14 +33,16 @@ class Isocortex2dProjector:
     hemisphere : {"both", "left", "right"}
         Whether to create a final projection with both hemispheres (default)
         or just left or right.
-    view_space_for_other_hemisphere : bool, 'flatmap_dorsal', 'flatmap_butterfly', or int, optional
+    view_space_for_other_hemisphere : bool, str, or int, optional
         If False (default), view is used as-is. If True, view is assumed to have
         the right half reserved for the other hemisphere, so that returning
         both hemispheres will result in a projection the size of the original
-        view. If 'flatmap_dorsal' or 'flatmap_butterfly', enough voxels will be removed to
-        cause the two hemispheres to be adjacent if used with the views of the same name.
+        view. This is valid for the 'top', 'back', 'bottom', and 'front' views.
+        If the value is a str, it must be one of 'flatmap_dorsal', flatmap_butterfly',
+        'medial', 'side', or 'rotated', which will use a preset value to place
+        the hemispheres adjacent or near adjacent when used with the views of the same name.
         If an integer of value `n`, the right-most `n` voxels will be removed
-        before combining both hemisphere.
+        before combining both hemispheres to allow the user to customize the spacing.
     """
 
     def __init__(self,
@@ -57,10 +68,8 @@ class Isocortex2dProjector:
             if isinstance(view_space_for_other_hemisphere, bool):
                 self.view_space_for_other_hemisphere = self.view_size[0] // 2
             elif isinstance(view_space_for_other_hemisphere, str):
-                if view_space_for_other_hemisphere == "flatmap_butterfly":
-                    self.view_space_for_other_hemisphere = 184
-                elif view_space_for_other_hemisphere == "flatmap_dorsal":
-                    self.view_space_for_other_hemisphere = 110
+                if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
+                    self.view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
                 else:
                     raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
             else:
@@ -235,10 +244,12 @@ class Isocortex3dProjector(Isocortex2dProjector):
         If False (default), view is used as-is. If True, view is assumed to have
         the right half reserved for the other hemisphere, so that returning
         both hemispheres will result in a projection the size of the original
-        view. If 'flatmap_dorsal' or 'flatmap_butterfly', enough voxels will be removed to
-        cause the two hemispheres to be adjacent if used with the views of the same name.
+        view. This is valid for the 'top', 'back', 'bottom', and 'front' views.
+        If the value is a str, it must be one of 'flatmap_dorsal', flatmap_butterfly',
+        'medial', 'side', or 'rotated', which will use a preset value to place
+        the hemispheres adjacent or near adjacent when used with the views of the same name.
         If an integer of value `n`, the right-most `n` voxels will be removed
-        before combining both hemisphere.
+        before combining both hemispheres to allow the user to customize the spacing.
     """
     ISOCORTEX_LAYER_KEYS = [
         'Isocortex layer 1',
@@ -563,10 +574,12 @@ class BoundaryFinder:
             If False (default), view is used as-is. If True, view is assumed to have
             the right half reserved for the other hemisphere, so that returning
             both hemispheres will result in a projection the size of the original
-            view. If 'flatmap_dorsal' or 'flatmap_butterfly', enough voxels will be removed to
-            cause the two hemispheres to be adjacent if used with the views of the same name.
+            view. This is valid for the 'top', 'back', 'bottom', and 'front' views.
+            If the value is a str, it must be one of 'flatmap_dorsal', flatmap_butterfly',
+            'medial', 'side', or 'rotated', which will use a preset value to place
+            the hemispheres adjacent or near adjacent when used with the views of the same name.
             If an integer of value `n`, the right-most `n` voxels will be removed
-            before combining both hemisphere.
+            before combining both hemispheres to allow the user to customize the spacing.
 
         Returns
         -------
@@ -650,10 +663,8 @@ class BoundaryFinder:
             if isinstance(view_space_for_other_hemisphere, bool):
                 view_space_for_other_hemisphere = self.proj_atlas.shape[0] // 2
             elif isinstance(view_space_for_other_hemisphere, str):
-                if view_space_for_other_hemisphere == "flatmap_butterfly":
-                    view_space_for_other_hemisphere = 184
-                elif view_space_for_other_hemisphere == "flatmap_dorsal":
-                    view_space_for_other_hemisphere = 110
+                if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
+                    view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
                 else:
                     raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
         else:
@@ -788,10 +799,12 @@ class IsocortexCoordinateProjector:
             If False (default), view is used as-is. If True, view is assumed to have
             the right half reserved for the other hemisphere, so that returning
             both hemispheres will result in a projection the size of the original
-            view. If 'flatmap_dorsal' or 'flatmap_butterfly', enough voxels will be removed to
-            cause the two hemispheres to be adjacent if used with the views of the same name.
+            view. This is valid for the 'top', 'back', 'bottom', and 'front' views.
+            If the value is a str, it must be one of 'flatmap_dorsal', flatmap_butterfly',
+            'medial', 'side', or 'rotated', which will use a preset value to place
+            the hemispheres adjacent or near adjacent when used with the views of the same name.
             If an integer of value `n`, the right-most `n` voxels will be removed
-            before combining both hemisphere.
+            before combining both hemispheres to allow the user to customize the spacing.
         drop_voxels_outside_view_streamlines : bool, default False
             Whether to set x-y coordinates of voxels not within streamlines
             used in 2-D view to NaN. If False (default), the nearest streamline within
@@ -811,10 +824,8 @@ class IsocortexCoordinateProjector:
             if isinstance(view_space_for_other_hemisphere, bool):
                 view_space_for_other_hemisphere = self.view_size[0] // 2
             elif isinstance(view_space_for_other_hemisphere, str):
-                if view_space_for_other_hemisphere == "flatmap_butterfly":
-                    view_space_for_other_hemisphere = 184
-                elif view_space_for_other_hemisphere == "flatmap_dorsal":
-                    view_space_for_other_hemisphere = 110
+                if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
+                    view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
                 else:
                     raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
         else:
