@@ -1,10 +1,10 @@
 Data Files
 ==========
 
-The `ccf_streamlines` package uses several data files that contain the different flattened
+The ``ccf_streamlines`` package uses several data files that contain the different flattened
 representations, cortical streamlines, and other information.
 
-To use many aspects of `ccf_streamlines`, these files must be downloaded to the user's computer,
+To use many aspects of ``ccf_streamlines``, these files must be downloaded to the user's computer,
 and their file paths are passed as parameters to various objects and functions.
 
 This document links to those files and describes what they contain.
