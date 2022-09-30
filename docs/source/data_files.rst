@@ -21,7 +21,7 @@ Streamlines
       - Description
     * - `surface_paths_10_v3.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/streamlines/surface_paths_10_v3.h5>`_
       - Contains the (linear) voxel locations of each streamline and a lookup table to find a streamline for each voxel. **Warning:** Large file (~0.5 GB)
-    * - `closest_surface_voxel_lookup.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/streamlines/surface_paths_10_v3.h5>`_
+    * - `closest_surface_voxel_lookup.h5 <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/cortical_coordinates/ccf_2017/ccf_streamlines_assets/streamlines/closest_surface_voxel_lookup.h5>`_
       - Lookup table of nearest surface voxel for cortical voxels, which are used to find the best-matching streamline. **Warning:** Large file (~200 MB)
 
 
