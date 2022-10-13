@@ -11,6 +11,15 @@ from scipy.spatial.distance import cdist
 from ccf_streamlines.linestring3d import LineString3D
 
 
+HEMISPHERE_SPACE_VIEW_LOOKUP = {
+    "flatmap_butterfly": 184,
+    "flatmap_dorsal": 110,
+    "medial": 270,
+    "side": 270,
+    "rotated": 390,
+}
+
+
 class Isocortex2dProjector:
     """ 2D projection of common cortical framework volumes
 
@@ -24,12 +33,16 @@ class Isocortex2dProjector:
     hemisphere : {"both", "left", "right"}
         Whether to create a final projection with both hemispheres (default)
         or just left or right.
-    view_space_for_other_hemisphere : bool or int, optional
+    view_space_for_other_hemisphere : bool, str, or int, optional
         If False (default), view is used as-is. If True, view is assumed to have
         the right half reserved for the other hemisphere, so that returning
         both hemispheres will result in a projection the size of the original
-        view. If an integer of value `n`, the right-most `n` voxels will be
-        removed before combining both hemisphere.
+        view. This is valid for the 'top', 'back', 'bottom', and 'front' views.
+        If the value is a str, it must be one of 'flatmap_dorsal', flatmap_butterfly',
+        'medial', 'side', or 'rotated', which will use a preset value to place
+        the hemispheres adjacent or near adjacent when used with the views of the same name.
+        If an integer of value `n`, the right-most `n` voxels will be removed
+        before combining both hemispheres to allow the user to customize the spacing.
     """
 
     def __init__(self,
@@ -54,6 +67,11 @@ class Isocortex2dProjector:
         if view_space_for_other_hemisphere:
             if isinstance(view_space_for_other_hemisphere, bool):
                 self.view_space_for_other_hemisphere = self.view_size[0] // 2
+            elif isinstance(view_space_for_other_hemisphere, str):
+                if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
+                    self.view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
+                else:
+                    raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
             else:
                 self.view_space_for_other_hemisphere = view_space_for_other_hemisphere
         else:
@@ -222,12 +240,16 @@ class Isocortex3dProjector(Isocortex2dProjector):
     hemisphere : {"both", "left", "right"}
         Whether to create a final projection with both hemispheres (default)
         or just left or right.
-    view_space_for_other_hemisphere : bool or int, optional
+    view_space_for_other_hemisphere : bool, 'flatmap_dorsal', 'flatmap_butterfly', or int, optional
         If False (default), view is used as-is. If True, view is assumed to have
         the right half reserved for the other hemisphere, so that returning
         both hemispheres will result in a projection the size of the original
-        view. If an integer of value `n`, the right-most `n` voxels will be
-        removed before combining both hemisphere.
+        view. This is valid for the 'top', 'back', 'bottom', and 'front' views.
+        If the value is a str, it must be one of 'flatmap_dorsal', flatmap_butterfly',
+        'medial', 'side', or 'rotated', which will use a preset value to place
+        the hemispheres adjacent or near adjacent when used with the views of the same name.
+        If an integer of value `n`, the right-most `n` voxels will be removed
+        before combining both hemispheres to allow the user to customize the spacing.
     """
     ISOCORTEX_LAYER_KEYS = [
         'Isocortex layer 1',
@@ -496,8 +518,6 @@ class Isocortex3dProjector(Isocortex2dProjector):
         return ref_thickness_voxels
 
 
-
-
 class BoundaryFinder:
     """ Boundaries of cortical regions from 2D atlas projections
 
@@ -550,13 +570,16 @@ class BoundaryFinder:
             Which hemisphere to return borders for. If "right_for_both", returns
             a shifted set of boundaries suitable for plotting on a "both"
             hemispheres view.
-        view_space_for_other_hemisphere : bool or int, optional
-            If False (default), view is used as-is.
-            If True, view is assumed to have  the right half reserved for the
-            other hemisphere, so that returning both hemispheres will result
-            in boundaries fitted to a projection the size of the original view.
-            If an integer of value `n`, the boundaries will fit a view with
-            the right-most `n` voxels will removed before combining both hemispheres.
+        view_space_for_other_hemisphere : bool, 'flatmap_dorsal', 'flatmap_butterfly', or int, optional
+            If False (default), view is used as-is. If True, view is assumed to have
+            the right half reserved for the other hemisphere, so that returning
+            both hemispheres will result in a projection the size of the original
+            view. This is valid for the 'top', 'back', 'bottom', and 'front' views.
+            If the value is a str, it must be one of 'flatmap_dorsal', flatmap_butterfly',
+            'medial', 'side', or 'rotated', which will use a preset value to place
+            the hemispheres adjacent or near adjacent when used with the views of the same name.
+            If an integer of value `n`, the right-most `n` voxels will be removed
+            before combining both hemispheres to allow the user to customize the spacing.
 
         Returns
         -------
@@ -639,6 +662,11 @@ class BoundaryFinder:
         if view_space_for_other_hemisphere:
             if isinstance(view_space_for_other_hemisphere, bool):
                 view_space_for_other_hemisphere = self.proj_atlas.shape[0] // 2
+            elif isinstance(view_space_for_other_hemisphere, str):
+                if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
+                    view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
+                else:
+                    raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
         else:
             view_space_for_other_hemisphere = 0
 
@@ -653,6 +681,7 @@ class BoundaryFinder:
                     raise ValueError(f"Region acronym {acronym} does not have an index")
 
         return region_acronyms, hemisphere, view_space_for_other_hemisphere
+
 
 class IsocortexCoordinateProjector:
     """" Class for projecting CCF coordinates to flattened representation.
@@ -766,12 +795,16 @@ class IsocortexCoordinateProjector:
             If "left" or "right", put all coordinates onto either left or right
             hemisphere (respectively), reflecting those that are on the opposite
             hemisphere to the specified one.
-        view_space_for_other_hemisphere : bool or int, optional
+        view_space_for_other_hemisphere : bool, 'flatmap_dorsal', 'flatmap_butterfly', or int, optional
             If False (default), view is used as-is. If True, view is assumed to have
             the right half reserved for the other hemisphere, so that returning
             both hemispheres will result in a projection the size of the original
-            view. If an integer of value `n`, the right-most `n` voxels will be
-            removed before combining both hemisphere.
+            view. This is valid for the 'top', 'back', 'bottom', and 'front' views.
+            If the value is a str, it must be one of 'flatmap_dorsal', flatmap_butterfly',
+            'medial', 'side', or 'rotated', which will use a preset value to place
+            the hemispheres adjacent or near adjacent when used with the views of the same name.
+            If an integer of value `n`, the right-most `n` voxels will be removed
+            before combining both hemispheres to allow the user to customize the spacing.
         drop_voxels_outside_view_streamlines : bool, default False
             Whether to set x-y coordinates of voxels not within streamlines
             used in 2-D view to NaN. If False (default), the nearest streamline within
@@ -790,6 +823,11 @@ class IsocortexCoordinateProjector:
         if view_space_for_other_hemisphere:
             if isinstance(view_space_for_other_hemisphere, bool):
                 view_space_for_other_hemisphere = self.view_size[0] // 2
+            elif isinstance(view_space_for_other_hemisphere, str):
+                if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
+                    view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
+                else:
+                    raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
         else:
             view_space_for_other_hemisphere = 0
 
@@ -805,6 +843,7 @@ class IsocortexCoordinateProjector:
             view_space_for_other_hemisphere,
             drop_voxels_outside_view_streamlines
         )
+
         depths = self._calculate_depths(reflect_coords, voxels, matching_surface_voxel_ind, thickness_type, scale)
 
         return np.array([projected_2d_coords[0], projected_2d_coords[1], depths]).T
@@ -889,6 +928,7 @@ class IsocortexCoordinateProjector:
 #                 depth_in_path = frac_along_path * path_thickness
                 depth_in_path = path_line.project(coords[i, :])
                 ref_layer_top = 0
+                appended = False
                 for k in self.ISOCORTEX_LAYER_KEYS:
                     pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
                     if pl_start == 0 and pl_end == 0:
@@ -898,9 +938,12 @@ class IsocortexCoordinateProjector:
                     if depth_in_path <= pl_end:
                         fraction_through_layer = (depth_in_path - pl_start) / (pl_end - pl_start)
                         depth.append(fraction_through_layer * self.layer_thicknesses[k] + ref_layer_top)
+                        appended = True
                         break
                     else:
                         ref_layer_top += self.layer_thicknesses[k]
+                if not appended:
+                    depth.append(np.nan)
 
         if thickness_type == "normalized_layers":
             ref_total_thickness = np.sum(list(self.layer_thicknesses.values()))
@@ -1049,7 +1092,6 @@ class IsocortexCoordinateProjector:
                 rot_path = LineString3D((rot @ (path.coords.T)).T)
                 rot_paths_cache[path_idx] = rot_path
             else:
-#                 print("cache hit", path_idx)
                 path_start = path_starts_cache[path_idx]
                 rot = rot_cache[path_idx]
                 rot_path = rot_paths_cache[path_idx]
