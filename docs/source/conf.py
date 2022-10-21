@@ -6,6 +6,12 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
+import sys
+import os
+sys.path.insert(0, os.path.abspath(".."))
+
+
+
 project = 'ccf_streamlines'
 copyright = '2022, Nathan Gouwens'
 author = 'Nathan Gouwens'
