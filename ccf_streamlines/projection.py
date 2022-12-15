@@ -1144,6 +1144,111 @@ class IsocortexCoordinateProjector:
             return projected_coords_x, projected_coords_y
 
 
+class IsocortexEntireProjector:
+    """ Projection of common cortical framework volumes using every streamline
+
+    Parameters
+    ----------
+    surface_paths_file : str
+        File path to an HDF5 file containing information about the paths between
+        the top and bottom of cortex.
+    resolution : tuple, default (10, 10, 10)
+        3-tuple of voxel dimensions in microns
+    """
+
+    def __init__(self, surface_paths_file, resolution=(10, 10, 10)):
+        # Load the surface path information
+        logging.info("Loading surface path file")
+        self.surface_paths_file = surface_paths_file
+        self.paths = self._load_paths(surface_paths_file)
+        self.resolution = resolution
+
+    def _load_paths(self, surface_paths_file):
+        with h5py.File(surface_paths_file, "r") as path_f:
+            paths = path_f["paths"][:]
+            volume_lookup_dset = path_f["volume lookup flat"]
+            self.volume_shape = tuple(volume_lookup_dset.attrs["original shape"])
+        return paths
+
+    def project_volume(self, volume, kind="max"):
+        """ Perform an operation across all streamlines
+
+        Parameters
+        ----------
+        volume : array
+            Input volume with size matching the streamline volume
+        kind : {'max', 'min', 'mean', 'average', 'sum'}
+            The operation to perform for each streamline. 'average' is equivalent to 'mean'.
+
+        Returns
+        -------
+        values : array
+            Linear array of the result of the operation for each streamline
+        """
+        if volume.shape != self.volume_shape:
+            raise ValueError(
+                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}")
+
+        if np.issubdtype(volume.dtype, np.integer):
+            min_val = np.iinfo(volume.dtype).min
+            max_val = np.iinfo(volume.dtype).max
+        elif np.issubdtype(volume.dtype, np.floating):
+            min_val = np.finfo(volume.dtype).min
+            max_val = np.finfo(volume.dtype).max
+        else:
+            raise ValueError("volume must have either integer or float data type")
+
+
+        if kind == "max":
+            # The path specification assumes the first point in the volume is not a
+            # valid data point and so should be ignored. Since we are doing a
+            # maximum projection, we set that to the minimum possible value
+            # so that it won't be selected
+            volume.flat[0] = min_val
+            values = volume.flat[self.paths].max(axis=1)
+        elif kind == "min":
+            # Same thing as above, just set to maximum instead of minimum
+            volume.flat[0] = max_val
+            values = volume.flat[self.paths].min(axis=1)
+        elif kind == "mean" or kind == "average":
+            values = np.nanmean(
+                np.where(self.paths > 0, volume.flat[self.paths], np.nan),
+                axis=1)
+        elif kind == "sum":
+            values = np.nansum(
+                np.where(self.paths > 0, volume.flat[self.paths], np.nan),
+                axis=1)
+
+        return values
+
+    def top_of_streamline_coords(self, scale='voxels'):
+        """ Get the 3D coordinates of the first voxels of every streamline
+
+        The order of coordinates is consistent with the order returned by `project_volume()`.
+
+        Parameters
+        ----------
+        scale : {"voxels", "microns"}
+            Scale for projected coordinates
+
+        Returns
+        -------
+        coords : array
+            Coordinates of the voxel at the start of each streamline. The order is the same
+            as `values`.
+        """
+
+        first_voxels = self.paths[:, 0]
+        first_voxel_coords = np.unravel_index(
+            first_voxels, self.volume_shape)
+        first_voxel_coords = np.array(first_voxel_coords)
+
+        if scale == "voxels":
+            return first_voxel_coords
+        elif scale == "microns":
+            return first_voxel_coords * self.resolution
+
+
 def _matching_voxel_indices(
     voxel_inds,
     matching_voxel_lookup,
