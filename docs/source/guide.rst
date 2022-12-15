@@ -396,6 +396,42 @@ For example, we can compare L2/3 to L4 like so.
     :width: 800
 
 
+Projecting a volume using all the streamlines
+---------------------------------------------
+
+The 2D projection files arrange the data from streamlines in a spatially
+organized way, as if by either viewing the cortex from a particular direction or
+by flattening it to see as much of the cortex from a single perspective.
+However, this means that any given view (even the flattened views) does not
+include every streamline of the isocortex.
+
+Instead, we can use the
+:class:`~ccf_streamlines.projection.IsocortexEntireProjector` to perform summary
+operations on every streamline for a given input volume. This returns a linear
+array of summarized values, and the class can also return a list of 3D coordinates
+from the top of each streamline in the same order, so that every value can be
+linked to a location on the cortical surface.
+
+.. code:: python3
+
+    # We only need to provide the streamline file since we are not using
+    # any 2D view lookup
+    proj_entire = ccfproj.IsocortexEntireProjector("surface_paths_10_v3.h5")
+
+    # Sum all the values for every streamline
+    sum_vals = proj_entire.project_volume(tlx_data, kind='sum')
+
+    # Get the coordinates for the top of every streamline (in the same
+    # order as sum_vals)
+    streamline_coords = proj_entire.top_of_streamline_coords()
+
+
+We can visualize the result as a 3D scatter plot:
+
+.. image:: /images/entire_example.png
+    :width: 600
+
+
 
 Projecting a morphology to 3D "slab"
 ------------------------------------
