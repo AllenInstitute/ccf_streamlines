@@ -122,9 +122,9 @@ class Isocortex2dProjector:
         ----------
         volume : array
             Input volume with size matching the lookup volume
-        kind : {'max', 'min', 'mean', 'average'}
-            Whether to create a minimum, maximum, or mean projection. 'average'
-            is equivalent to 'mean'.
+        kind : {'max', 'min', 'mean', 'average', 'sum'}
+            Whether to create a minimum, maximum, mean, or summed projection.
+            'average' is equivalent to 'mean'.
 
         Returns
         -------
@@ -184,6 +184,10 @@ class Isocortex2dProjector:
             projected_volume.flat[self.view_lookup[:, 0]] = volume.flat[self.paths].min(axis=1)
         elif kind == "mean" or kind == "average":
             projected_volume.flat[self.view_lookup[:, 0]] = np.nanmean(
+                np.where(self.paths > 0, volume.flat[self.paths], np.nan),
+                axis=1)
+        elif kind == "sum":
+            projected_volume.flat[self.view_lookup[:, 0]] = np.nansum(
                 np.where(self.paths > 0, volume.flat[self.paths], np.nan),
                 axis=1)
 
@@ -1241,7 +1245,7 @@ class IsocortexEntireProjector:
         first_voxels = self.paths[:, 0]
         first_voxel_coords = np.unravel_index(
             first_voxels, self.volume_shape)
-        first_voxel_coords = np.array(first_voxel_coords)
+        first_voxel_coords = np.array(first_voxel_coords).T
 
         if scale == "voxels":
             return first_voxel_coords
