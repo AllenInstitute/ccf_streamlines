@@ -3,7 +3,7 @@ import numpy as np
 from ccf_streamlines.coordinates import coordinates_to_voxels
 from ccf_streamlines.projection import _matching_voxel_indices
 from scipy.spatial.distance import euclidean
-
+import logging
 
 def vector_to_3d_affine_matrix(vec):
     M = np.array([[vec[0], vec[1], vec[2], vec[9]],
@@ -76,17 +76,28 @@ def find_closest_streamline(
         np.array([voxel_ind]),
         closest_surface_voxels)[0]
 
+    if matching_surface_voxel_ind == 0:
+        # the voxel is not within the isocortex and therefore has no defined
+        # closest streamline
+        logging.warning("Requested voxel is not within isocortex and has no defined closest streamline")
+        return np.array([])
+
     # Pull path from surface paths file
     if isinstance(surface_paths, str):
         with h5py.File(surface_paths, "r") as f:
             path_dset = f['paths']
             volume_lookup_dset = f['volume lookup flat']
             path_ind = volume_lookup_dset[matching_surface_voxel_ind]
+            if path_ind == -1: # -1 is defined as not existing
+                logging.error("Voxel has no defined streamline")
+
             path = path_dset[path_ind, :]
     else:
         path_dset = surface_paths['paths']
         volume_lookup_dset = surface_paths['volume lookup flat']
         path_ind = volume_lookup_dset[matching_surface_voxel_ind]
+        if path_ind == -1: # -1 is defined as not existing
+            logging.error("Voxel has no defined streamline")
         path = path_dset[path_ind, :]
 
     path = path[path > 0]
