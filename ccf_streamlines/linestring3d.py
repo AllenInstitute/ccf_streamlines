@@ -69,7 +69,7 @@ class LineString3D:
         for i in range(self.coords.shape[0] - 1):
             segments[i, :, 0] = self.coords[i, :]
             segments[i, :, 1] = self.coords[i + 1, :]
-        segment_vecs = np.squeeze(np.diff(segments, axis=2))
+        segment_vecs = np.squeeze(np.diff(segments, axis=2), axis=2)
         segment_lengths = self.segment_lengths()
         norms = segment_vecs / np.linalg.norm(segment_vecs, axis=1)[:, np.newaxis]
         starts = np.squeeze(segments[:, :, 0])
