@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.abspath("../.."))
 project = 'ccf_streamlines'
 copyright = '2022, Nathan Gouwens'
 author = 'Nathan Gouwens'
-release = '1.1.2'
+release = '1.1.3'
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
