@@ -1,3 +1,19 @@
+[project]
+name = "ccf_streamlines"
+version = "1.1.4"
+description = "Projection of Allen CCF data via streamlines"
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "h5py>=3.14.0",
+    "numpy>=2.0.2",
+    "pandas>=2.3.3",
+    "pynrrd>=1.1.3",
+    "scikit-image>=0.24.0",
+    "scipy>=1.13.1",
+    "tqdm>=4.67.3",
+]
+
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.10.2,<0.11.0"]
+build-backend = "uv_build"
