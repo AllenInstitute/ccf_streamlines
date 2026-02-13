@@ -1054,8 +1054,16 @@ class IsocortexCoordinateProjector:
                 self.volume_shape)
             used_streamline_coords = np.array(used_streamline_coords).T
 
-            dist_to_used = cdist(coords_to_find, used_streamline_coords)
-            min_dist_idx = np.argmin(dist_to_used, axis=1)
+            # find nearest voxels in chunks to reduce memory footprint
+            chunk_size = 100
+            min_dist_idx_list = []
+            for i in range(0, coords_to_find.shape[0], chunk_size):
+                min_dist_idx_list.append(
+                    np.argmin(
+                        cdist(coords_to_find[i:i + chunk_size], used_streamline_coords),
+                        axis=1)
+                )
+            min_dist_idx = np.concatenate(min_dist_idx_list)
             projected_ind[
                 (matching_surface_voxel_ind != 0) & (projected_ind == -1)
             ] = self.view_lookup[min_dist_idx, 0]
