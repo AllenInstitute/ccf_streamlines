@@ -1026,7 +1026,14 @@ class IsocortexCoordinateProjector:
 
         # Find the flattened projection indices for matching surface voxels
         projected_ind = np.zeros_like(matching_surface_voxel_ind, dtype=int)
-        sorter = np.argsort(self.view_lookup[:, 1])
+        # A stable sort is required here. Many surface voxels appear more than once in
+        # view_lookup[:, 1], and _matching_voxel_indices resolves them with
+        # np.searchsorted, which returns the left insertion point. Which of the tied
+        # rows sits at that position - and therefore which 2D view index is returned -
+        # depends on how the sort orders equal keys. The default quicksort is unstable
+        # and numpy dispatches it to architecture-specific SIMD kernels, so the same
+        # input gives different projections on different CPUs.
+        sorter = np.argsort(self.view_lookup[:, 1], kind="stable")
         projected_ind = _matching_voxel_indices(
             matching_surface_voxel_ind,
             self.view_lookup,
