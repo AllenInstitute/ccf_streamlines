@@ -13,7 +13,7 @@ network access, no database, no state outside the caller's arrays.
 ## Commands
 
     uv sync                       # install; requires-python >=3.9
-    uv run pytest                 # whole suite: 2 tests, <1s (pyproject sets testpaths=tests, pythonpath=src)
+    uv run pytest                 # whole suite: 7 tests, ~3s (pyproject sets testpaths=tests, pythonpath=src)
     cd docs && make html          # Sphinx docs -> docs/build (needs docs/requirements.txt: sphinx 5.2.3)
 
 There is no lint, format, or typecheck configuration in the repo, and no CI test job —
@@ -23,7 +23,8 @@ publishes to PyPI on GitHub release. Merges are gated by nothing automated.
 ## Layout
 
 - `src/ccf_streamlines/` — the entire package; src-layout, built by `uv_build` (`pyproject.toml`).
-- `tests/` — pytest, currently covering only `coordinates.py`.
+- `tests/` — pytest. Covers `coordinates.py` and `BoundaryFinder`; the projector
+  classes are untested because they need the multi-hundred-MB reference files.
 - `docs/source/guide.rst` — the real user documentation: worked examples for each
   projector class, with expected output images. Read this before changing a public
   signature; it is the closest thing to an integration test.
@@ -99,10 +100,6 @@ publishes to PyPI on GitHub release. Merges are gated by nothing automated.
   `hemisphere="both"` the second pass writes through the `np.flip` *view*, so
   `volume[0, 0, -1]` is clobbered too (verified). Copy the volume before projecting if you
   need it intact.
-- **`BoundaryFinder.region_masks` returns empty arrays with its own defaults.** With
-  `view_space_for_other_hemisphere=False` the validator turns it into `0`, and the code then
-  does `region_raster[:-0, :]`, which is an empty slice (verified). Callers must pass a
-  nonzero value. `region_boundaries` handles `0` correctly; only `region_masks` is broken.
 - **Unknown `kind` fails silently or obscurely.** `_project_volume_to_view` has no `else`
   branch, so a typo'd `kind` returns an all-zeros view; `IsocortexEntireProjector.project_volume`
   hits `UnboundLocalError` on `values` instead.
@@ -118,9 +115,6 @@ publishes to PyPI on GitHub release. Merges are gated by nothing automated.
   it is flagged as such in its own comment (`metrics.py:68`).
 - `.python-version` (pinning 3.9) is **gitignored**, so a fresh clone is not pinned — `uv sync`
   there resolves to whatever interpreter uv finds (3.13 in this checkout). Nothing tests 3.9.
-- `BoundaryFinder` passes the regex `sep="\s+"` as a plain string (`projection.py:556`),
-  which raises `SyntaxWarning: invalid escape sequence` on Python 3.12+. Make it a raw
-  string if you touch that line.
 - Dead imports: `itertools` in `projection.py`; `h5py`, `nrrd`, `pandas`, `logging`, and
   `tqdm` in `metrics.py` (only `numpy` is used there).
 - `docs/source/reference/processing.rst` titles itself `ccf_streamlines.projection` — wrong
@@ -128,4 +122,4 @@ publishes to PyPI on GitHub release. Merges are gated by nothing automated.
 - A stale, untracked `ccf_streamlines.egg-info/` sits in the repo root from the pre-uv
   setuptools build. It is not the build source; `uv_build` is (`pyproject.toml`).
 
-<!-- codebase-summarizer: end; generated 2026-08-28, commit 83f50cb, 41 claims -->
+<!-- codebase-summarizer: end; generated 2026-08-28, commit c91140a, 39 claims -->
