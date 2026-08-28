@@ -8,14 +8,21 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.abspath("../.."))
+import re
 
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
+sys.path.insert(0, os.path.join(_REPO_ROOT, "src"))
 
 
 project = 'ccf_streamlines'
 copyright = '2022, Nathan Gouwens'
 author = 'Nathan Gouwens'
-release = '1.1.4'
+
+# Single-sourced from pyproject.toml so the docs cannot drift from the package
+# version. Read directly rather than via importlib.metadata, since Read the Docs
+# builds the docs without installing the project.
+with open(os.path.join(_REPO_ROOT, "pyproject.toml")) as _f:
+    release = re.search(r'^version = "([^"]+)"', _f.read(), re.MULTILINE).group(1)
 
 # -- General configuration ---------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
