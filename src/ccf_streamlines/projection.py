@@ -1090,7 +1090,12 @@ class IsocortexCoordinateProjector:
                         cdist(coords_to_find[i:i + chunk_size], used_streamline_coords),
                         axis=1)
                 )
-            min_dist_idx = np.concatenate(min_dist_idx_list)
+            if min_dist_idx_list:
+                min_dist_idx = np.concatenate(min_dist_idx_list)
+            else:
+                # nothing to look up - every matching surface voxel is already
+                # used by the view, so no chunk was processed above
+                min_dist_idx = np.zeros(0, dtype=int)
             projected_ind[
                 (matching_surface_voxel_ind != 0) & (projected_ind == -1)
             ] = self.view_lookup[min_dist_idx, 0]
