@@ -1,3 +1,35 @@
+[project]
+name = "ccf-streamlines"
+version = "1.1.4"
+description = "Projection of Allen CCF data via streamlines"
+readme = "README.md"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Python :: 3",
+]
+dependencies = [
+    "h5py>=2.10",
+    "numpy",
+    "pandas",
+    "pynrrd",
+    "scikit-image",
+    "scipy",
+    "tqdm",
+]
+
+[project.urls]
+Homepage = "https://github.com/AllenInstitute/ccf_streamlines"
+Documentation = "https://ccf-streamlines.readthedocs.io"
+
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["uv_build>=0.9.26,<0.13.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=7",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

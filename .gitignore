@@ -76,3 +76,6 @@ target/
 
 # Development
 sandbox/
+
+# Shell redirect debris from unquoted version specifiers (e.g. uv add h5py>=2.10)
+=*
