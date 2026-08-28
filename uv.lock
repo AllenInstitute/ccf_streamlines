@@ -58,6 +58,9 @@ dev = [
     { name = "pytest-cov", specifier = ">=4" },
 ]
 
+[package.metadata.requires-dev]
+dev = [{ name = "pytest", specifier = ">=7" }]
+
 [[package]]
 name = "colorama"
 version = "0.4.6"
