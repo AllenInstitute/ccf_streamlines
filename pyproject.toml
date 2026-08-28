@@ -19,6 +19,7 @@ dependencies = [
 
 [project.urls]
 Homepage = "https://github.com/AllenInstitute/ccf_streamlines"
+Documentation = "https://ccf-streamlines.readthedocs.io"
 
 [build-system]
 requires = ["uv_build>=0.9.26,<0.13.0"]
