@@ -553,7 +553,7 @@ class BoundaryFinder:
         self.labels_df =  pd.read_csv(
             labels_file,
             header=None,
-            sep="\s+",
+            sep=r"\s+",
             index_col=0
         )
         self.labels_df.columns = ["r", "g", "b", "x0", "x1", "x2", "acronym"]
@@ -639,7 +639,8 @@ class BoundaryFinder:
             region_raster = np.zeros_like(self.proj_atlas).astype(bool)
             region_raster[self.proj_atlas == ind] = True
 
-            region_raster = region_raster[:-view_space_for_other_hemisphere, :]
+            if view_space_for_other_hemisphere > 0:
+                region_raster = region_raster[:-view_space_for_other_hemisphere, :]
             if hemisphere == "left":
                 pass
             elif hemisphere == "right":
