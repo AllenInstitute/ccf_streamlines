@@ -1,0 +1,69 @@
+# Gates pull requests. The suite needs no data files and finishes in seconds,
+# so this runs on every push and every PR.
+#
+# The architecture dimension is not optional. The stable-sort defect
+# (issue #12) exists *only* as a divergence between processor architectures:
+# numpy dispatches its default quicksort to architecture-specific SIMD kernels,
+# which order tied keys differently. A single-architecture matrix is
+# structurally incapable of catching that class of bug.
+#
+# The Python dimension spans the oldest supported release and a current one, so
+# an unpinned dependency breaking on a new release surfaces here rather than in
+# a user's environment.
+#
+# Coverage is reported but not gated: a threshold rewards tests that execute
+# lines without asserting anything about the numbers they produce.
+#
+# A lint job can be added as a separate entry in `jobs` without restructuring
+# this one.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: py${{ matrix.python-version }} on ${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            arch: x86_64
+            python-version: "3.9"
+          - runner: ubuntu-latest
+            arch: x86_64
+            python-version: "3.13"
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            python-version: "3.9"
+          - runner: ubuntu-24.04-arm
+            arch: arm64
+            python-version: "3.13"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Run the test suite
+        # The real-data tier is skipped automatically: CCF_STREAMLINES_TEST_DATA
+        # is deliberately never set here.
+        run: >
+          uv run --python ${{ matrix.python-version }}
+          pytest --cov=ccf_streamlines --cov-report=term-missing -ra
