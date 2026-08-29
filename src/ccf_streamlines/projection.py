@@ -43,6 +43,10 @@ class Isocortex2dProjector:
         the hemispheres adjacent or near adjacent when used with the views of the same name.
         If an integer of value `n`, the right-most `n` voxels will be removed
         before combining both hemispheres to allow the user to customize the spacing.
+    chunk_size : int, default 1000
+        Number of entries read from the volume lookup at a time while ordering
+        the paths to match the view. Reading in chunks keeps peak memory down;
+        the default is suitable for the full-size reference files.
     """
 
     def __init__(self,
@@ -50,11 +54,13 @@ class Isocortex2dProjector:
         surface_paths_file,
         hemisphere="both",
         view_space_for_other_hemisphere=False,
+        chunk_size=1000,
     ):
         if hemisphere not in {"both", "left", "right"}:
             raise ValueError(f"Value of `hemisphere` ({hemisphere}) is not allowed; must be `both`, `left`, or `right`.")
 
         self.hemisphere = hemisphere
+        self.chunk_size = chunk_size
 
         # Load the projection information
         logging.info("Loading projection file")
@@ -99,7 +105,7 @@ class Isocortex2dProjector:
             view_unsorter = np.argsort(view_sorter)
 
             # pull chunks from volume lookup to reduce memory usage
-            chunk_size = 1000
+            chunk_size = self.chunk_size
             sorted_lookup = self.view_lookup[view_sorter, 1]
             path_ind = np.zeros_like(sorted_lookup)
             print("loading path information")
@@ -254,6 +260,9 @@ class Isocortex3dProjector(Isocortex2dProjector):
         the hemispheres adjacent or near adjacent when used with the views of the same name.
         If an integer of value `n`, the right-most `n` voxels will be removed
         before combining both hemispheres to allow the user to customize the spacing.
+    chunk_size : int, default 1000
+        Number of entries read from the volume lookup at a time while ordering
+        the paths to match the view.
     """
     ISOCORTEX_LAYER_KEYS = [
         'Isocortex layer 1',
@@ -272,12 +281,14 @@ class Isocortex3dProjector(Isocortex2dProjector):
         streamline_layer_thickness_file=None,
         hemisphere="both",
         view_space_for_other_hemisphere=False,
+        chunk_size=1000,
     ):
         super().__init__(
             projection_file,
             surface_paths_file,
             hemisphere,
             view_space_for_other_hemisphere,
+            chunk_size,
         )
 
         allowed_thickness_types = {"unnormalized", "normalized_full", "normalized_layers"}
@@ -713,6 +724,10 @@ class IsocortexCoordinateProjector:
     projection_file : str, optional
         File path to an HDF5 file containing the 2D projection information.
         If None (default), only depth information can be obtained.
+    chunk_size : int, default 1000
+        Number of entries read from the volume lookup at a time when resolving
+        surface voxels to streamlines. Reading in chunks keeps peak memory
+        down; the default is suitable for the full-size reference files.
     """
 
     ISOCORTEX_LAYER_KEYS = [
@@ -730,9 +745,11 @@ class IsocortexCoordinateProjector:
         layer_thicknesses=None,
         streamline_layer_thickness_file=None,
         resolution=(10, 10, 10),
-        projection_file=None):
+        projection_file=None,
+        chunk_size=1000):
 
         self.layer_thicknesses = layer_thicknesses
+        self.chunk_size = chunk_size
 
         # Load the surface path information
         logging.info("Loading surface path file")
@@ -965,7 +982,9 @@ class IsocortexCoordinateProjector:
         else:
             return depth
 
-    def _path_lookup_chunked(self, indices, chunk_size=1000):
+    def _path_lookup_chunked(self, indices, chunk_size=None):
+        if chunk_size is None:
+            chunk_size = self.chunk_size
         sorter = np.argsort(indices)
         unsorter = np.argsort(sorter)
         sorted_indices = indices[sorter]
