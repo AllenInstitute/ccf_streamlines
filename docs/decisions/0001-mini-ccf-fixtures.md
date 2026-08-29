@@ -79,6 +79,14 @@ assertions are exact integer equalities rather than tolerances. A query at a
 streamline voxel corner has an offset residual of exactly zero, so a projected
 view coordinate equals the expected pixel with no floating-point slack.
 
+A test asserting how numpy's *default* sort orders tied keys is not portable,
+even at fourteen elements. The first run of this matrix showed the default and
+stable sorts of the fixture's view-lookup keys agreeing on the arm64 runners
+and on a local x86-64 workstation, and disagreeing on GitHub's x86-64 runners.
+Tests about sort stability therefore inject both orderings explicitly rather
+than relying on the platform's default, and the matrix earned its place inside
+a minute of first running.
+
 Two costs are accepted:
 
 **Fixtures can quietly become self-consistent fiction** - exactly as the format
