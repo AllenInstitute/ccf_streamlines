@@ -35,6 +35,33 @@ def projector(mini_ccf):
     return _projector(mini_ccf)
 
 
+def _unambiguous_paths(mini_ccf):
+    """Paths the view references exactly once.
+
+    A streamline that two view pixels both show has no single correct answer
+    here until #11 lands: which of the tied pixels comes back depends on how
+    the platform's sort orders equal keys, and it genuinely differs between
+    architectures -- GitHub's x86-64 runners and its arm64 runners disagree on
+    this fixture. Asserting one of them would only re-test the pinned
+    contribution, badly.
+
+    So the exactness tests use streamlines with an unambiguous pixel, and the
+    tied case stays in ``tests/test_pinned_contributions.py`` where it belongs.
+    """
+    return [
+        int(p)
+        for p in mini_ccf.in_view_path_indices
+        if len(mini_ccf.view_pixels_for_path(int(p))) == 1
+    ]
+
+
+@pytest.fixture
+def unambiguous_path(mini_ccf):
+    paths = _unambiguous_paths(mini_ccf)
+    assert paths, "the fixture must have at least one untied in-view streamline"
+    return paths[0]
+
+
 #: Queries are made with drop-outside on, which sidesteps the empty-search
 #: crash pinned in tests/test_pinned_contributions.py. Once #13 lands this can
 #: be dropped.
@@ -171,12 +198,12 @@ def test_a_coordinate_on_a_streamline_lands_exactly_on_its_view_pixel(
     projector, mini_ccf
 ):
     """No tolerance: the geometric offset residual at a voxel corner is zero."""
-    for path_index in mini_ccf.in_view_path_indices:
-        coord = mini_ccf.coord_on_path(int(path_index), 3).reshape(1, 3)
+    for path_index in _unambiguous_paths(mini_ccf):
+        coord = mini_ccf.coord_on_path(path_index, 3).reshape(1, 3)
 
         result = projector.project_coordinates(coord, hemisphere="left", **DROP)
 
-        expected_row, expected_col = mini_ccf.view_pixel_for_path(int(path_index))
+        expected_row, expected_col = mini_ccf.view_pixel_for_path(path_index)
         assert (result[0, 0], result[0, 1]) == (expected_row, expected_col)
 
 
@@ -257,25 +284,27 @@ def test_keeping_outside_view_coordinates_snaps_to_the_nearest_streamline(
 # -- hemispheres -----------------------------------------------------------
 
 
-def test_left_keeps_everything_on_the_left(projector, mini_ccf):
-    coord = mini_ccf.coord_on_path(0, 3).reshape(1, 3)
-    expected_row, _ = mini_ccf.view_pixel_for_path(0)
+def test_left_keeps_everything_on_the_left(projector, mini_ccf, unambiguous_path):
+    coord = mini_ccf.coord_on_path(unambiguous_path, 3).reshape(1, 3)
+    expected_row, _ = mini_ccf.view_pixel_for_path(unambiguous_path)
 
     result = projector.project_coordinates(coord, hemisphere="left", **DROP)
 
     assert result[0, 0] == expected_row
 
 
-def test_right_reflects_everything_to_the_right(projector, mini_ccf):
-    coord = mini_ccf.coord_on_path(0, 3).reshape(1, 3)
-    expected_row, _ = mini_ccf.view_pixel_for_path(0)
+def test_right_reflects_everything_to_the_right(projector, mini_ccf, unambiguous_path):
+    coord = mini_ccf.coord_on_path(unambiguous_path, 3).reshape(1, 3)
+    expected_row, _ = mini_ccf.view_pixel_for_path(unambiguous_path)
 
     result = projector.project_coordinates(coord, hemisphere="right", **DROP)
 
     assert result[0, 0] == mini_ccf.view_size[0] - expected_row
 
 
-def test_both_keeps_each_coordinate_on_its_own_side(projector, mini_ccf):
+def test_both_keeps_each_coordinate_on_its_own_side(
+    projector, mini_ccf, unambiguous_path
+):
     """A right-hemisphere coordinate is placed in the right half of the view.
 
     Note the coordinate projector reflects with ``z_size - z``; the volume
@@ -283,7 +312,7 @@ def test_both_keeps_each_coordinate_on_its_own_side(projector, mini_ccf):
     ``test_projector_2d.test_the_two_hemisphere_mirroring_conventions_differ_by_one_voxel``.
     """
     z_size = mini_ccf.volume_shape[2]
-    voxel = mini_ccf.path_voxels(0)[3].copy()
+    voxel = mini_ccf.path_voxels(unambiguous_path)[3].copy()
     left_coord = (voxel * np.array(mini_ccf.resolution)).astype(float)
     voxel[2] = z_size - voxel[2]
     right_coord = (voxel * np.array(mini_ccf.resolution)).astype(float)
@@ -292,7 +321,7 @@ def test_both_keeps_each_coordinate_on_its_own_side(projector, mini_ccf):
         np.vstack([left_coord, right_coord]), hemisphere="both", **DROP
     )
 
-    expected_row, _ = mini_ccf.view_pixel_for_path(0)
+    expected_row, _ = mini_ccf.view_pixel_for_path(unambiguous_path)
     assert result[0, 0] == expected_row
     assert result[1, 0] == 2 * mini_ccf.view_size[0] - expected_row
 
