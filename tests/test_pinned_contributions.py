@@ -126,6 +126,21 @@ def _tie_reversing_argsort(real_argsort):
     return tie_reversing_argsort
 
 
+def _tie_preserving_argsort(real_argsort):
+    """The mirror image: always resolve ties in row order.
+
+    Used to give the comparison in the end-to-end test a fixed reference that
+    does not depend on what the platform's default sort happens to do.
+    """
+
+    def tie_preserving_argsort(a, axis=-1, kind=None, order=None):
+        if np.ndim(a) != 1:
+            return real_argsort(a, axis=axis, kind=kind, order=order)
+        return real_argsort(a, axis=axis, kind="stable", order=order)
+
+    return tie_preserving_argsort
+
+
 def test_matching_voxel_indices_resolves_a_tie_by_sorter_order(mini_ccf):
     """Characterization: this passes both before and after the fix.
 
@@ -175,15 +190,32 @@ def test_the_hostile_sort_is_a_legal_sort(mini_ccf):
 
 
 def test_the_obvious_version_of_this_test_would_prove_nothing(mini_ccf):
-    """At fixture scale numpy's default sort and a stable sort agree.
+    """Whether the default sort reorders these ties is a property of the build.
 
-    numpy falls back to insertion sort below roughly sixteen elements, and
-    insertion sort is stable, so a test that simply compared "before" to
-    "after" would pass identically with and without the fix. This is why the
-    end-to-end test below injects a hostile sort instead.
+    A naive version of the end-to-end test below would call
+    ``project_coordinates`` twice and compare, relying on numpy's default sort
+    to reorder ties. Whether it does is not something a test can count on:
+
+    - numpy falls back to insertion sort, which is stable, below roughly
+      sixteen elements, so on many builds the default and stable sorts of
+      these fourteen keys are identical and the naive test is vacuous;
+    - but numpy also dispatches to architecture-specific SIMD kernels, and on
+      GitHub's x86-64 runners the two *do* differ at this size, while on the
+      arm64 runners and on a local x86-64 workstation they do not.
+
+    So the naive test is either vacuous or platform-dependent, and which one
+    varies by machine. That is exactly the situation the injected sorts below
+    exist to remove. This test asserts only what is true on every build: both
+    orderings are valid sorts of the keys, and they can legitimately disagree
+    about ties.
     """
     keys = mini_ccf.view_lookup[:, 1]
-    assert np.array_equal(np.argsort(keys), np.argsort(keys, kind="stable"))
+    default = np.argsort(keys)
+    stable = np.argsort(keys, kind="stable")
+
+    assert np.all(np.diff(keys[default]) >= 0)
+    assert np.all(np.diff(keys[stable]) >= 0)
+    assert sorted(default.tolist()) == sorted(stable.tolist())
 
 
 @pytest.mark.xfail(strict=True, reason=PR11)
@@ -210,18 +242,23 @@ def test_2d_coordinates_are_independent_of_sort_tie_order(
     coords = mini_ccf.coord_on_path(path_index, 3).reshape(1, 3)
     kwargs = dict(hemisphere="left", drop_voxels_outside_view_streamlines=True)
 
-    baseline = coordinate_projector.project_coordinates(coords, **kwargs)
+    real_argsort = np.argsort
 
-    monkeypatch.setattr(np, "argsort", _tie_reversing_argsort(np.argsort))
-    hostile = coordinate_projector.project_coordinates(coords, **kwargs)
+    # Both references are injected, so neither depends on what this platform's
+    # default sort happens to do with ties -- which varies by numpy build.
+    monkeypatch.setattr(np, "argsort", _tie_preserving_argsort(real_argsort))
+    preserved = coordinate_projector.project_coordinates(coords, **kwargs)
 
-    assert np.array_equal(baseline, hostile), (
+    monkeypatch.setattr(np, "argsort", _tie_reversing_argsort(real_argsort))
+    reversed_ties = coordinate_projector.project_coordinates(coords, **kwargs)
+
+    assert np.array_equal(preserved, reversed_ties), (
         "the projected coordinate changed when tied view-lookup keys were "
         "ordered differently, which is what differs between architectures"
     )
     # And the answer is the smallest tied view index, not merely a stable one.
     expected_row, expected_col = min(pixels)
-    assert (hostile[0, 0], hostile[0, 1]) == (expected_row, expected_col)
+    assert (reversed_ties[0, 0], reversed_ties[0, 1]) == (expected_row, expected_col)
 
 
 def test_sort_gather_unsort_round_trips_survive_a_hostile_tie_order(
