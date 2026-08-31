@@ -15,9 +15,10 @@ from ccf_streamlines.angle import (
 )
 
 RESOLUTION_NOT_FORWARDED = (
-    "`find_closest_streamline` accepts `resolution` but does not forward it to "
-    "`coordinates_to_voxels`, so a non-default resolution voxelises against "
-    "(10, 10, 10); remove this marker when it is fixed"
+    "AllenInstitute/ccf_streamlines#23: `find_closest_streamline` accepts "
+    "`resolution` but does not forward it to `coordinates_to_voxels`, so a "
+    "non-default resolution voxelises against (10, 10, 10); remove this marker "
+    "when it is fixed"
 )
 
 #: Maps the unit square onto the xy-plane, so the plane normal is +z.
