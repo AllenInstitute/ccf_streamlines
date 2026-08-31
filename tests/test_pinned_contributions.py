@@ -169,7 +169,9 @@ def test_matching_voxel_indices_resolves_a_tie_by_sorter_order(mini_ccf):
         lookup_ind=1,
         ref_ind=0,
         missing_value=-1,
-        sorter=np.lexsort((-np.arange(len(mini_ccf.view_lookup)), mini_ccf.view_lookup[:, 1])),
+        sorter=np.lexsort(
+            (-np.arange(len(mini_ccf.view_lookup)), mini_ccf.view_lookup[:, 1])
+        ),
     )
 
     # Because view-lookup rows are in increasing view-index order within a tied
@@ -238,7 +240,7 @@ def test_2d_coordinates_are_independent_of_sort_tie_order(
     assert len(pixels) > 1
 
     coords = mini_ccf.coord_on_path(path_index, 3).reshape(1, 3)
-    kwargs = dict(hemisphere="left", drop_voxels_outside_view_streamlines=True)
+    kwargs = {"hemisphere": "left", "drop_voxels_outside_view_streamlines": True}
 
     real_argsort = np.argsort
 

@@ -7,8 +7,8 @@ def upscale_ish_volume(
     target_voxel_size=10,
     target_volume_shape=(1320, 800, 1140),
     rotate_axes=True,
-    ):
-    """ Upscale a lower-resolution ISH volume for projection.
+):
+    """Upscale a lower-resolution ISH volume for projection.
 
     Parameters
     ----------

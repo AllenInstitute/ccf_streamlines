@@ -53,8 +53,12 @@ def test_project_a_point_beside_the_path(straight_path):
 
 
 def test_project_normalized_is_the_fraction_of_total_length(straight_path):
-    assert straight_path.project(np.array([0.0, 2.5, 0.0]), normalized=True) == pytest.approx(0.25)
-    assert straight_path.project(np.array([0.0, 10.0, 0.0]), normalized=True) == pytest.approx(1.0)
+    assert straight_path.project(
+        np.array([0.0, 2.5, 0.0]), normalized=True
+    ) == pytest.approx(0.25)
+    assert straight_path.project(
+        np.array([0.0, 10.0, 0.0]), normalized=True
+    ) == pytest.approx(1.0)
 
 
 def test_project_across_a_bend(bent_path):
@@ -90,7 +94,9 @@ def test_offset_is_the_perpendicular_displacement(straight_path):
     assert offset == pytest.approx([2.0, 0.0, -3.0])
 
 
-def test_offset_of_a_point_beyond_the_end_is_measured_from_the_last_vertex(straight_path):
+def test_offset_of_a_point_beyond_the_end_is_measured_from_the_last_vertex(
+    straight_path,
+):
     offset = straight_path.offset_of_point(np.array([1.0, 20.0, 0.0]))
     assert offset == pytest.approx([1.0, 10.0, 0.0])
 

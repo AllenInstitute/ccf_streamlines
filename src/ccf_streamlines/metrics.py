@@ -1,12 +1,6 @@
 import numpy as np
-import pandas as pd
-import nrrd
-import h5py
-import logging
-from tqdm import tqdm
 
 from ccf_streamlines.projection import ISOCORTEX_LAYER_KEYS
-
 
 # Structure set IDs from the mouse ontology, in the same pia-to-white-matter
 # order as ISOCORTEX_LAYER_KEYS. The names come from that one list so a
@@ -25,7 +19,7 @@ LAYER_LABELS = dict(zip(ISOCORTEX_LAYER_STRUCTURE_SET_IDS, ISOCORTEX_LAYER_KEYS)
 
 
 def measure_streamline_layer_thicknesses(layer_volume, paths, resolution):
-    """ Measure the start, end, and thickness of layers
+    """Measure the start, end, and thickness of layers
 
     Parameters
     ----------
@@ -47,25 +41,25 @@ def measure_streamline_layer_thicknesses(layer_volume, paths, resolution):
     paths_diff = np.diff(paths, axis=1)
     for i in range(paths.shape[0]):
         unique_inds = np.flatnonzero(paths_diff[i, :])
-        fixed_paths[i, :len(unique_inds)] = paths[i, :][unique_inds]
+        fixed_paths[i, : len(unique_inds)] = paths[i, :][unique_inds]
     paths = fixed_paths
 
     max_nonzero_path_inds = np.count_nonzero(paths, axis=1)
 
     # get voxel coordinates for all path voxels
     path_x, path_y, path_z = np.unravel_index(paths, layer_volume.shape)
-    path_voxels = np.stack([
-        path_x * resolution[0],
-        path_y * resolution[1],
-        path_z * resolution[2]
-    ])
+    path_voxels = np.stack(
+        [path_x * resolution[0], path_y * resolution[1], path_z * resolution[2]]
+    )
 
     # Find distances between consecutive voxels
     deltas = np.diff(path_voxels, axis=2)
-    distances = np.sqrt((deltas ** 2).sum(axis=0))
+    distances = np.sqrt((deltas**2).sum(axis=0))
 
     # add thickness of last voxel to end of paths
-    distances[np.arange(distances.shape[0]), max_nonzero_path_inds - 1] = np.mean(resolution)
+    distances[np.arange(distances.shape[0]), max_nonzero_path_inds - 1] = np.mean(
+        resolution
+    )
 
     # Calculate cumulative depths
     cumul_distances = np.cumsum(distances, axis=1)

@@ -16,12 +16,20 @@ network access, no database, no state outside the caller's arrays.
     uv run pytest                 # whole suite; seconds, no data files needed
     CCF_STREAMLINES_TEST_DATA=... uv run pytest -m real_data   # opt-in tier, real assets
     cd docs && make html          # Sphinx docs -> docs/build (needs docs/requirements.txt: sphinx 5.2.3)
+    uv run ruff check --fix .     # lint
+    uv run ruff format .          # format
 
-There is no lint, format, or typecheck configuration in the repo.
+Ruff is the only lint/format tool; its configuration is the `[tool.ruff]` block in
+`pyproject.toml` (`select = E, W, F, I, UP, B, C4`, `target-version = "py39"`, `E501`
+left to the formatter). There is no typecheck configuration, and `src/` carries no type
+annotations, so do not add a typechecker piecemeal.
 `.github/workflows/tests.yml` gates pull requests across x86-64 and ARM64 on Python
 3.9 and 3.13; the architecture dimension is load-bearing, since the tied-view-lookup
 defect exists only as a divergence between architectures. Coverage is reported, not
-gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
+gated. Its second job, `lint`, runs `ruff check` and `ruff format --check` once on
+x86-64 — findings are a property of the source, not the machine — installing only the
+dev group so the scientific stack is skipped. `python-publish.yml` builds and publishes
+to PyPI on GitHub release.
 
 ## Layout
 
@@ -156,8 +164,9 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
   it is flagged as such in its own comment (`metrics.py:76`).
 - `.python-version` (pinning 3.9) is **gitignored**, so a fresh clone is not pinned — `uv sync`
   there resolves to whatever interpreter uv finds (3.13 in this checkout). Nothing tests 3.9.
-- Dead imports: `itertools` in `projection.py`; `h5py`, `nrrd`, `pandas`, `logging`, and
-  `tqdm` in `metrics.py` (only `numpy` and the shared layer-key import are used there).
+- `tests/test_real_data.py` imports from `tests.mini_ccf` *after* a
+  `pytest.importorskip("h5py")`, so the import carries a `# noqa: E402`. It is the only
+  suppression in the repo; the rest of the tree is clean under the configured rules.
 - `docs/source/reference/processing.rst` titles itself `ccf_streamlines.projection` — wrong
   module name in the heading.
 - A stale, untracked `ccf_streamlines.egg-info/` sits in the repo root from the pre-uv

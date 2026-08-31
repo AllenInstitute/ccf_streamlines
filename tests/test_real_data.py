@@ -28,7 +28,9 @@ import pytest
 
 h5py = pytest.importorskip("h5py")
 
-from tests.mini_ccf import LAYER_KEYS, reference_layer_thicknesses
+# The import has to follow the importorskip above: without h5py installed
+# there is nothing for this tier to assert against.
+from tests.mini_ccf import LAYER_KEYS  # noqa: E402
 
 pytestmark = pytest.mark.real_data
 
@@ -106,8 +108,7 @@ def test_the_flat_lookup_is_populated_only_at_streamline_starts(surface_paths):
 
             later = np.unique(row[1:]).astype(np.int64)
             assert np.all(flat[later.tolist()] == -1), (
-                "a non-start voxel is populated; the fixture fills start "
-                "voxels only"
+                "a non-start voxel is populated; the fixture fills start voxels only"
             )
 
 
@@ -342,7 +343,9 @@ def test_a_real_projection_runs_through_the_public_interface(
     assert result[row, col] == 200
 
 
-def test_mirrored_queries_find_mirrored_streamlines(surface_paths, closest_surface_voxels):
+def test_mirrored_queries_find_mirrored_streamlines(
+    surface_paths, closest_surface_voxels
+):
     """`find_closest_streamline` on real streamlines, which actually differ.
 
     The mini-CCF's streamlines all run straight down +y and are identical from
@@ -385,12 +388,18 @@ def test_mirrored_queries_find_mirrored_streamlines(surface_paths, closest_surfa
         right[2] = z_size * resolution[2] - left[2]
 
         from_left = find_closest_streamline(
-            left, reference, str(surface_paths),
-            resolution=resolution, volume_shape=shape,
+            left,
+            reference,
+            str(surface_paths),
+            resolution=resolution,
+            volume_shape=shape,
         )
         from_right = find_closest_streamline(
-            right, reference, str(surface_paths),
-            resolution=resolution, volume_shape=shape,
+            right,
+            reference,
+            str(surface_paths),
+            resolution=resolution,
+            volume_shape=shape,
         )
 
         assert from_left.size > 0, f"the left-hand control must be in cortex ({voxel})"

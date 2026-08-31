@@ -14,7 +14,6 @@ from ccf_streamlines.angle import (
     vector_to_3d_affine_matrix,
 )
 
-
 #: Maps the unit square onto the xy-plane, so the plane normal is +z.
 XY_PLANE = vector_to_3d_affine_matrix([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])
 
@@ -114,12 +113,18 @@ def test_the_reference_may_be_a_preloaded_array(mini_ccf):
 
     coord = mini_ccf.coord_on_path(0, 3)
     from_array = find_closest_streamline(
-        coord, closest, mini_ccf.surface_paths_file,
-        resolution=mini_ccf.resolution, volume_shape=mini_ccf.volume_shape,
+        coord,
+        closest,
+        mini_ccf.surface_paths_file,
+        resolution=mini_ccf.resolution,
+        volume_shape=mini_ccf.volume_shape,
     )
     from_path = find_closest_streamline(
-        coord, mini_ccf.closest_surface_voxel_file, mini_ccf.surface_paths_file,
-        resolution=mini_ccf.resolution, volume_shape=mini_ccf.volume_shape,
+        coord,
+        mini_ccf.closest_surface_voxel_file,
+        mini_ccf.surface_paths_file,
+        resolution=mini_ccf.resolution,
+        volume_shape=mini_ccf.volume_shape,
     )
     assert np.array_equal(from_array, from_path)
 
@@ -130,8 +135,11 @@ def test_surface_paths_may_be_an_open_h5py_file(mini_ccf):
     coord = mini_ccf.coord_on_path(0, 3)
     with h5py.File(mini_ccf.surface_paths_file, "r") as f:
         from_handle = find_closest_streamline(
-            coord, mini_ccf.closest_surface_voxel_file, f,
-            resolution=mini_ccf.resolution, volume_shape=mini_ccf.volume_shape,
+            coord,
+            mini_ccf.closest_surface_voxel_file,
+            f,
+            resolution=mini_ccf.resolution,
+            volume_shape=mini_ccf.volume_shape,
         )
     assert np.array_equal(from_handle, mini_ccf.path_microns(0))
 
@@ -203,19 +211,26 @@ def test_mirror_image_queries_return_mirror_image_streamlines(mini_ccf, frac):
         right = left.copy()
         right[2] = z_size * res[2] - left[2]
 
-        kw = dict(
-            resolution=mini_ccf.resolution, volume_shape=mini_ccf.volume_shape
-        )
+        kw = {
+            "resolution": mini_ccf.resolution,
+            "volume_shape": mini_ccf.volume_shape,
+        }
         from_left = find_closest_streamline(
-            left, mini_ccf.closest_surface_voxel_file,
-            mini_ccf.surface_paths_file, **kw,
+            left,
+            mini_ccf.closest_surface_voxel_file,
+            mini_ccf.surface_paths_file,
+            **kw,
         )
         from_right = find_closest_streamline(
-            right, mini_ccf.closest_surface_voxel_file,
-            mini_ccf.surface_paths_file, **kw,
+            right,
+            mini_ccf.closest_surface_voxel_file,
+            mini_ccf.surface_paths_file,
+            **kw,
         )
 
-        assert from_left.size > 0, f"the left-hand control must find a streamline (z={z_left})"
+        assert from_left.size > 0, (
+            f"the left-hand control must find a streamline (z={z_left})"
+        )
         mirrored = from_left.copy()
         mirrored[:, 2] = (z_size - 1) * res[2] - from_left[:, 2]
         assert np.array_equal(from_right, mirrored), f"z={z_left}"
@@ -236,7 +251,9 @@ def test_the_plane_just_right_of_the_midline_is_reflected(mini_ccf_factory):
     mini_ccf = mini_ccf_factory(z_positions=(1, 2, 3), extra_z_positions=(4, 5))
     z_size = mini_ccf.volume_shape[2]
     first_right = z_size // 2
-    assert z_size - 1 - first_right == 5, "the mirror must be the midline-adjacent streamline"
+    assert z_size - 1 - first_right == 5, (
+        "the mirror must be the midline-adjacent streamline"
+    )
 
     x, y, _ = mini_ccf.path_voxels(0)[3]
     coord = (np.array([x, y, first_right]) + 0.5) * np.array(mini_ccf.resolution)
@@ -255,13 +272,18 @@ def test_the_plane_just_right_of_the_midline_is_reflected(mini_ccf_factory):
 def test_a_coordinate_may_be_given_as_a_flat_triple(mini_ccf):
     coord = mini_ccf.coord_on_path(0, 3)
     flat = find_closest_streamline(
-        coord, mini_ccf.closest_surface_voxel_file, mini_ccf.surface_paths_file,
-        resolution=mini_ccf.resolution, volume_shape=mini_ccf.volume_shape,
+        coord,
+        mini_ccf.closest_surface_voxel_file,
+        mini_ccf.surface_paths_file,
+        resolution=mini_ccf.resolution,
+        volume_shape=mini_ccf.volume_shape,
     )
     nested = find_closest_streamline(
-        coord.reshape(1, 3), mini_ccf.closest_surface_voxel_file,
+        coord.reshape(1, 3),
+        mini_ccf.closest_surface_voxel_file,
         mini_ccf.surface_paths_file,
-        resolution=mini_ccf.resolution, volume_shape=mini_ccf.volume_shape,
+        resolution=mini_ccf.resolution,
+        volume_shape=mini_ccf.volume_shape,
     )
     assert np.array_equal(flat, nested)
 

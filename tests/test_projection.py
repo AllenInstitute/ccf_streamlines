@@ -1,5 +1,5 @@
-import numpy as np
 import nrrd
+import numpy as np
 import pytest
 
 from ccf_streamlines.projection import BoundaryFinder
@@ -23,10 +23,7 @@ def boundary_finder(tmp_path):
     # Deliberately ragged whitespace: the labels file is parsed with a `\s+`
     # separator, so alignment padding and tabs must be tolerated.
     labels_file = tmp_path / "labels.txt"
-    labels_file.write_text(
-        "1   255 0   0   1 1 1\tAAA\n"
-        "2     0 255 0   1 1 1  BBB\n"
-    )
+    labels_file.write_text("1   255 0   0   1 1 1\tAAA\n2     0 255 0   1 1 1  BBB\n")
 
     return BoundaryFinder(str(atlas_file), str(labels_file)), atlas
 
@@ -44,7 +41,7 @@ def test_region_masks_default_keeps_full_view(boundary_finder):
     masks = bf.region_masks()
 
     assert set(masks) == {"AAA", "BBB"}
-    for acronym, mask in masks.items():
+    for mask in masks.values():
         assert mask.shape == atlas.shape
 
     assert np.array_equal(masks["AAA"], atlas == 1)

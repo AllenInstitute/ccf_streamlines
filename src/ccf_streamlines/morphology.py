@@ -1,10 +1,11 @@
 import numpy as np
 import pandas as pd
+
 from ccf_streamlines.coordinates import coordinates_to_voxels
 
 
 def load_swc_as_dataframe(swc_file):
-    """ Load a morphology SWC file into a pandas DataFrame.
+    """Load a morphology SWC file into a pandas DataFrame.
 
     The dataframe contains the columns:
         - ID : node identifier
@@ -42,12 +43,9 @@ def load_swc_as_dataframe(swc_file):
 
 
 def transform_swc_to_volume(
-    swc_file,
-    volume_shape=(1320, 800, 1140),
-    resolution=(10, 10, 10),
-    compartments=None
-    ):
-    """ Create a volume with node counts from a morphology SWC file.
+    swc_file, volume_shape=(1320, 800, 1140), resolution=(10, 10, 10), compartments=None
+):
+    """Create a volume with node counts from a morphology SWC file.
 
     Parameters
     ----------
@@ -76,10 +74,10 @@ def transform_swc_to_volume(
 
     # Limit to requested compartment types
     if compartments is not None:
-        swc_df = swc_df.loc[swc_df['type'].isin(compartments), :]
+        swc_df = swc_df.loc[swc_df["type"].isin(compartments), :]
 
     # Determine voxels from coordinates
-    coords = swc_df.loc[:, ['x', 'y', 'z']].values
+    coords = swc_df.loc[:, ["x", "y", "z"]].values
 
     return transform_coordinates_to_volume(coords, volume_shape, resolution)
 
@@ -88,8 +86,8 @@ def transform_coordinates_to_volume(
     coords,
     volume_shape=(1320, 800, 1140),
     resolution=(10, 10, 10),
-    ):
-    """ Create a volume with counts of points.
+):
+    """Create a volume with counts of points.
 
     Parameters
     ----------
@@ -112,13 +110,15 @@ def transform_coordinates_to_volume(
 
     # Place counts into volume
     volume = np.zeros(volume_shape, dtype=np.uint32)
-    volume[populated_voxels[:, 0], populated_voxels[:, 1], populated_voxels[:, 2]] = counts
+    volume[populated_voxels[:, 0], populated_voxels[:, 1], populated_voxels[:, 2]] = (
+        counts
+    )
 
     return volume
 
 
 def find_topological_point_coordinates(swc_df):
-    """ Get the coordinates of the branch and termination nodes
+    """Get the coordinates of the branch and termination nodes
 
     Parameters
     ----------
@@ -132,9 +132,9 @@ def find_topological_point_coordinates(swc_df):
     """
 
     child_counts = swc_df["parent_id"].value_counts()
-    branch_ids = child_counts[child_counts > 1].index.intersection(swc_df["id"]).tolist()
+    branch_ids = (
+        child_counts[child_counts > 1].index.intersection(swc_df["id"]).tolist()
+    )
     term_ids = [i for i in swc_df["id"] if i not in child_counts.index]
 
     return swc_df.set_index("id").loc[branch_ids + term_ids, ["x", "y", "z"]].values
-
-

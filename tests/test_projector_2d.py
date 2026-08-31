@@ -8,7 +8,10 @@ substantial share of the known defects live.
 import numpy as np
 import pytest
 
-from ccf_streamlines.projection import HEMISPHERE_SPACE_VIEW_LOOKUP, Isocortex2dProjector
+from ccf_streamlines.projection import (
+    HEMISPHERE_SPACE_VIEW_LOOKUP,
+    Isocortex2dProjector,
+)
 
 
 @pytest.fixture
@@ -62,7 +65,8 @@ def test_invalid_hemisphere_raises(mini_ccf):
 
 def test_view_space_false_is_zero(mini_ccf):
     proj = Isocortex2dProjector(
-        mini_ccf.view_lookup_file, mini_ccf.surface_paths_file,
+        mini_ccf.view_lookup_file,
+        mini_ccf.surface_paths_file,
         view_space_for_other_hemisphere=False,
     )
     assert proj.view_space_for_other_hemisphere == 0
@@ -70,7 +74,8 @@ def test_view_space_false_is_zero(mini_ccf):
 
 def test_view_space_true_is_half_the_view(mini_ccf):
     proj = Isocortex2dProjector(
-        mini_ccf.view_lookup_file, mini_ccf.surface_paths_file,
+        mini_ccf.view_lookup_file,
+        mini_ccf.surface_paths_file,
         view_space_for_other_hemisphere=True,
     )
     assert proj.view_space_for_other_hemisphere == mini_ccf.view_size[0] // 2
@@ -82,7 +87,8 @@ def test_view_space_named_view_resolves_to_its_preset(mini_ccf, name, expected):
     miniature view by 110 or 390 would empty it -- so this asserts the resolved
     value rather than attempting a round trip."""
     proj = Isocortex2dProjector(
-        mini_ccf.view_lookup_file, mini_ccf.surface_paths_file,
+        mini_ccf.view_lookup_file,
+        mini_ccf.surface_paths_file,
         view_space_for_other_hemisphere=name,
     )
     assert proj.view_space_for_other_hemisphere == expected
@@ -90,7 +96,8 @@ def test_view_space_named_view_resolves_to_its_preset(mini_ccf, name, expected):
 
 def test_view_space_integer_is_used_as_is(mini_ccf):
     proj = Isocortex2dProjector(
-        mini_ccf.view_lookup_file, mini_ccf.surface_paths_file,
+        mini_ccf.view_lookup_file,
+        mini_ccf.surface_paths_file,
         view_space_for_other_hemisphere=3,
     )
     assert proj.view_space_for_other_hemisphere == 3
@@ -100,7 +107,8 @@ def test_unknown_named_view_raises_at_construction(mini_ccf):
     """A misspelled view name must fail here, not produce a wrong picture."""
     with pytest.raises(ValueError, match="unknown string option"):
         Isocortex2dProjector(
-            mini_ccf.view_lookup_file, mini_ccf.surface_paths_file,
+            mini_ccf.view_lookup_file,
+            mini_ccf.surface_paths_file,
             view_space_for_other_hemisphere="flatmap_buttrfly",
         )
 
@@ -131,12 +139,16 @@ def test_mean_projection_averages_over_the_streamline(
 ):
     """1..8 averages to 4.5. Padding is excluded, not counted as zero."""
     row, col = mini_ccf.view_pixel_for_path(0)
-    assert projector.project_volume(ramp_volume, kind=kind)[row, col] == pytest.approx(4.5)
+    assert projector.project_volume(ramp_volume, kind=kind)[row, col] == pytest.approx(
+        4.5
+    )
 
 
 def test_sum_projection_totals_the_streamline(projector, mini_ccf, ramp_volume):
     row, col = mini_ccf.view_pixel_for_path(0)
-    assert projector.project_volume(ramp_volume, kind="sum")[row, col] == pytest.approx(36.0)
+    assert projector.project_volume(ramp_volume, kind="sum")[row, col] == pytest.approx(
+        36.0
+    )
 
 
 def test_the_four_aggregations_differ(projector, mini_ccf, ramp_volume):
@@ -179,8 +191,10 @@ def test_both_with_view_space_reproduces_the_original_view_size(mini_ccf, ramp_v
     """Cropping each half by half the view and concatenating gets back to the
     view's own size -- which is the point of the option."""
     proj = Isocortex2dProjector(
-        mini_ccf.view_lookup_file, mini_ccf.surface_paths_file,
-        hemisphere="both", view_space_for_other_hemisphere=True,
+        mini_ccf.view_lookup_file,
+        mini_ccf.surface_paths_file,
+        hemisphere="both",
+        view_space_for_other_hemisphere=True,
     )
     result = proj.project_volume(ramp_volume)
     assert result.shape == mini_ccf.view_size
@@ -203,8 +217,7 @@ def test_right_hemisphere_flips_the_first_dimension(mini_ccf):
 
     lit = {tuple(p) for p in np.argwhere(result > 0)}
     expected = {
-        (mini_ccf.view_size[0] - 1 - r, c)
-        for r, c in mini_ccf.view_pixels_for_path(0)
+        (mini_ccf.view_size[0] - 1 - r, c) for r, c in mini_ccf.view_pixels_for_path(0)
     }
     assert lit == expected
 

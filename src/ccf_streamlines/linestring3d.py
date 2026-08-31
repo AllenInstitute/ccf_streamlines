@@ -2,7 +2,7 @@ import numpy as np
 
 
 class LineString3D:
-    """" Class for operating on 3D paths
+    """ " Class for operating on 3D paths
 
     Akin to the 2D LineString class in the shapely package (but not nearly as
     fully featured).
@@ -12,6 +12,7 @@ class LineString3D:
     coords : (N, 3) array
         3D coordinates that define the path
     """
+
     def __init__(self, coords):
         self.coords = coords
         self.length = self.segment_lengths().sum()
@@ -19,7 +20,7 @@ class LineString3D:
     def segment_lengths(self):
         """Lengths of each segment (defined by two adjacent points)"""
         deltas = np.diff(self.coords, axis=0)
-        distances = np.sqrt((deltas ** 2).sum(axis=1))
+        distances = np.sqrt((deltas**2).sum(axis=1))
         return distances
 
     def offset_of_point(self, point):
@@ -45,7 +46,9 @@ class LineString3D:
             offset = point - proj
         else:
             # not on a line segment, so find closest point
-            dist_to_line = np.sqrt(((self.coords - point[np.newaxis, :]) ** 2).sum(axis=1))
+            dist_to_line = np.sqrt(
+                ((self.coords - point[np.newaxis, :]) ** 2).sum(axis=1)
+            )
             closest_idx = np.argmin(dist_to_line)
             offset = point - self.coords[closest_idx, :]
         return offset
@@ -82,13 +85,17 @@ class LineString3D:
             # so find which is closest
             closest_on_segment = np.argmin(dist_to_proj[on_segment])
             closest_idx = np.arange(projected.shape[0])[on_segment][closest_on_segment]
-            length_along_path = segment_lengths[:closest_idx].sum() + inner_product[closest_idx]
+            length_along_path = (
+                segment_lengths[:closest_idx].sum() + inner_product[closest_idx]
+            )
         else:
             # not on a line segment, so find closest point
-            dist_to_line = np.sqrt(((self.coords - point[np.newaxis, :]) ** 2).sum(axis=1))
+            dist_to_line = np.sqrt(
+                ((self.coords - point[np.newaxis, :]) ** 2).sum(axis=1)
+            )
             closest_idx = np.argmin(dist_to_line)
             if closest_idx == 0:
-                length_along_path = 0.
+                length_along_path = 0.0
             else:
                 length_along_path = segment_lengths[:closest_idx].sum()
         if normalized:
@@ -121,11 +128,15 @@ class LineString3D:
 
         cross = np.cross(path_vec, v)
         dot = np.dot(path_vec, v)
-        cross_mat = np.array([
-            [0, -cross[2], cross[1]],
-            [cross[2], 0, -cross[0]],
-            [-cross[1], cross[0], 0]
-        ])
+        cross_mat = np.array(
+            [
+                [0, -cross[2], cross[1]],
+                [cross[2], 0, -cross[0]],
+                [-cross[1], cross[0], 0],
+            ]
+        )
 
-        rot = np.identity(3) + cross_mat + np.dot(cross_mat, cross_mat) * (1 / (1 + dot))
+        rot = (
+            np.identity(3) + cross_mat + np.dot(cross_mat, cross_mat) * (1 / (1 + dot))
+        )
         return rot
