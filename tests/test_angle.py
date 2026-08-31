@@ -14,12 +14,6 @@ from ccf_streamlines.angle import (
     vector_to_3d_affine_matrix,
 )
 
-RESOLUTION_NOT_FORWARDED = (
-    "AllenInstitute/ccf_streamlines#23: `find_closest_streamline` accepts "
-    "`resolution` but does not forward it to `coordinates_to_voxels`, so a "
-    "non-default resolution voxelises against (10, 10, 10); remove this marker "
-    "when it is fixed"
-)
 
 #: Maps the unit square onto the xy-plane, so the plane normal is +z.
 XY_PLANE = vector_to_3d_affine_matrix([1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])
@@ -194,7 +188,6 @@ def test_a_coordinate_may_be_given_as_a_flat_triple(mini_ccf):
     assert np.array_equal(flat, nested)
 
 
-@pytest.mark.xfail(strict=True, reason=RESOLUTION_NOT_FORWARDED)
 def test_resolution_is_honoured_when_finding_the_streamline(mini_ccf):
     """The same physical point, expressed at a coarser voxel size.
 

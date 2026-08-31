@@ -57,7 +57,7 @@ def find_closest_streamline(
     else:
         closest_surface_voxels = closest_surface_voxel_reference
 
-    voxel = np.squeeze(coordinates_to_voxels(coord))
+    voxel = np.squeeze(coordinates_to_voxels(coord, resolution=resolution))
 
     # Reference file data only present on left side, so flip to left side
     # if voxel is on the right
