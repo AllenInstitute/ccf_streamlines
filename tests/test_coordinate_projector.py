@@ -63,11 +63,10 @@ def _mirrored_voxel(mini_ccf, voxel):
     the centre of voxel ``z_size - 1 - z``. That is what ``np.flip`` does, and
     it is what the coordinate projector's *micron* reflection does.
 
-    It is not what the coordinate projector's *voxel* reflection does -- that
-    uses ``z_size - z``, one voxel out. Tests here build their input with the
-    correct convention regardless, so they do not bake the defect into their
-    own setup; the defect itself is pinned under "reflection consistency" at
-    the bottom of this file.
+    It is also what the coordinate projector's *voxel* reflection does, since
+    #27; it used to be ``z_size - z``, one voxel out. Tests here always built
+    their input with the correct convention, so none of them baked the defect
+    into its own setup.
     """
     mirrored = np.array(voxel).copy()
     mirrored[2] = mini_ccf.volume_shape[2] - 1 - mirrored[2]
@@ -437,43 +436,25 @@ def test_projecting_without_a_projection_file_raises_a_clear_error(mini_ccf):
 # -- reflection consistency -------------------------------------------------
 #
 # Right-hemisphere data is mirrored onto the left before anything is looked up,
-# and `_get_collapsed_voxels_and_surface_voxels` does it twice, by two
-# conventions that do not agree:
+# and `_get_collapsed_voxels_and_surface_voxels` does it twice -- once for the
+# voxel, which selects the streamline, and once for the micron coordinate,
+# which measures depth along it. The two must land on the same voxel, or the
+# depth is measured along a neighbouring streamline.
 #
-#     voxels[..., 2]         = z_size - z                 (line 1018)
-#     reflect_coords[..., 2] = z_size * resolution - u    (line 1022)
+#     voxels[..., 2]         = z_size - 1 - z
+#     reflect_coords[..., 2] = z_size * resolution - u
 #
-# The micron form is the geometrically correct one: voxel z spans [z, z+1) with
-# centre z + 0.5, and mirroring that centre about the midline plane at z_size/2
-# gives (z_size - 1 - z) + 0.5, the centre of voxel z_size - 1 - z. The volume
-# projectors agree with it -- `np.flip(volume, axis=2)` is exactly z_size-1-z --
-# so the voxel line is the outlier.
+# Voxel z spans [z, z+1) with centre z + 0.5, and mirroring that centre about
+# the midline plane at z_size/2 gives (z_size - 1 - z) + 0.5, the centre of
+# voxel z_size - 1 - z. The volume projectors agree -- `np.flip(volume,
+# axis=2)` is exactly z_size-1-z.
 #
-# The two agree only when a coordinate sits exactly on a voxel boundary, which
-# is precisely what `coord_on_path` returns. That is deliberate elsewhere (a
-# corner makes the geometric offset exactly zero, so view pixels come out as
-# exact integers) but it means the rest of this file cannot see the mismatch.
-# These tests query voxel centres instead.
-#
-# NOTE for whoever fixes this. Changing line 1018 to `z_size - 1 - z` turns the
-# two xfail tests below into XPASS(strict) and breaks nothing else in this
-# file: every test that builds a right-hemisphere input does so through
-# `_mirrored_voxel`, which uses the correct convention, so none of them has the
-# defect baked into its own setup.
-#
-# It is still a behaviour change for every right-hemisphere coordinate, not a
-# silent correction -- the exact placement asserted by
-# `test_both_keeps_each_coordinate_on_its_own_side` moves by one voxel, which
-# is why that test bounds the right-hand coordinate to the correct half rather
-# than pinning an exact column that is currently wrong.
-
-
-MIRROR_OFF_BY_ONE = (
-    "AllenInstitute/ccf_streamlines#27: `_get_collapsed_voxels_and_surface_voxels` reflects voxels with "
-    "`z_size - z` but coordinates with `z_size * resolution - u`, so for any "
-    "point not on a voxel boundary the streamline is chosen one voxel away "
-    "from where the depth is measured; remove this marker when they agree"
-)
+# The voxel line used to read `z_size - z`, one voxel out. The two forms agree
+# only when a coordinate sits exactly on a voxel boundary, which is precisely
+# what `coord_on_path` returns -- deliberate elsewhere, since a corner makes
+# the geometric offset exactly zero and view pixels come out as exact integers,
+# but it meant the rest of this file could not see the mismatch. The tests
+# below query voxel centres instead.
 
 
 def _voxel_centre(mini_ccf, voxel):
@@ -481,13 +462,16 @@ def _voxel_centre(mini_ccf, voxel):
     return (np.array(voxel) + 0.5) * np.array(mini_ccf.resolution)
 
 
-def test_voxel_corner_queries_cannot_see_the_reflection_mismatch(projector, mini_ccf):
-    """Why the rest of this file is blind to the defect below.
+def test_the_voxel_reflection_is_where_the_reflected_coordinate_lands(
+    projector, mini_ccf
+):
+    """Inside a voxel the reflection is ``z_size - 1 - z``, the np.flip form.
 
-    On a voxel boundary the two reflections land on the same voxel, so every
-    assertion made with ``coord_on_path`` holds either way. Real coordinates
-    come from registration and reconstruction and are essentially never on a
-    boundary.
+    The projector does not use that formula -- it takes the voxel the mirrored
+    micron coordinate falls in, so the two cannot disagree -- but for any point
+    inside a voxel the two are the same thing. The superseded ``z_size - z`` is
+    one voxel out everywhere here, which is what made depth get measured along
+    a neighbouring streamline.
     """
     from ccf_streamlines.coordinates import coordinates_to_voxels
 
@@ -495,31 +479,59 @@ def test_voxel_corner_queries_cannot_see_the_reflection_mismatch(projector, mini
     res_z = mini_ccf.resolution[2]
 
     for z in range(z_size // 2 + 1, z_size):
-        corner = float(z * res_z)
-        by_voxel = z_size - z
-        by_coordinate = coordinates_to_voxels(
-            np.array([[0.0, 0.0, z_size * res_z - corner]]), mini_ccf.resolution
-        )[0, 2]
-        assert by_voxel == by_coordinate
+        for frac in (0.01, 0.5, 0.99):
+            inside = (z + frac) * res_z
+            by_coordinate = coordinates_to_voxels(
+                np.array([[0.0, 0.0, z_size * res_z - inside]]), mini_ccf.resolution
+            )[0, 2]
 
-        centre = corner + res_z / 2.0
-        by_coordinate_centre = coordinates_to_voxels(
-            np.array([[0.0, 0.0, z_size * res_z - centre]]), mini_ccf.resolution
-        )[0, 2]
-        # ...and off the boundary they do not.
-        assert by_voxel != by_coordinate_centre
+            assert z_size - 1 - z == by_coordinate
+            assert z_size - z != by_coordinate  # the superseded convention
 
 
-@pytest.mark.xfail(strict=True, reason=MIRROR_OFF_BY_ONE)
+@pytest.mark.parametrize("frac", [0.0, 0.01, 0.25, 0.5, 0.75, 0.99])
+def test_mirror_image_points_have_the_same_depth(projector, mini_ccf, frac):
+    """The invariant the whole reflection exists to preserve.
+
+    ``u`` and ``z_size * resolution - u`` are the same point reflected about
+    the midline, so they lie at the same depth in cortex. Checked at several
+    positions within the voxel, including ``frac=0`` -- exactly on a boundary,
+    which is what a caller passing voxel index times resolution produces, and
+    the one case a voxel-space reflection formula gets wrong.
+    """
+    z_size = mini_ccf.volume_shape[2]
+    res_z = mini_ccf.resolution[2]
+
+    x, y, _ = mini_ccf.path_voxels(0)[3]
+    lateral = sorted({int(v) for v in mini_ccf.path_starts[:, 2]})
+
+    left = np.array([
+        [(x + frac) * mini_ccf.resolution[0],
+         (y + frac) * mini_ccf.resolution[1],
+         (z + frac) * res_z]
+        for z in lateral
+    ])
+    right = left.copy()
+    right[:, 2] = z_size * res_z - left[:, 2]
+
+    left_depths = projector.project_depths(left)
+    right_depths = projector.project_depths(right)
+
+    assert np.array_equal(np.isnan(left_depths), np.isnan(right_depths))
+    both = ~np.isnan(left_depths)
+    assert both.any(), "the left-hand controls must be on streamlines"
+    assert left_depths[both] == pytest.approx(right_depths[both])
+
+
 def test_a_right_hemisphere_coordinate_inside_a_voxel_finds_its_streamline(
     projector, mini_ccf
 ):
     """A point whose mirror lies on a streamline must have a depth.
 
     The deepest-lateral streamline sits at ``z_s``; a right-hemisphere point at
-    the centre of voxel ``z_size - 1 - z_s`` mirrors onto it exactly. But the
-    voxel reflection sends that point to ``z_s + 1`` instead, where no
-    streamline exists, so the query comes back as the not-in-cortex sentinel
+    the centre of voxel ``z_size - 1 - z_s`` mirrors onto it exactly. The
+    superseded voxel reflection sent that point to ``z_s + 1`` instead, where
+    no streamline exists, so the query came back as the not-in-cortex sentinel
     for a point that is squarely on a streamline.
     """
     z_size = mini_ccf.volume_shape[2]
@@ -539,15 +551,14 @@ def test_a_right_hemisphere_coordinate_inside_a_voxel_finds_its_streamline(
     assert right_depth == pytest.approx(left_depth)
 
 
-@pytest.mark.xfail(strict=True, reason=MIRROR_OFF_BY_ONE)
 def test_a_right_hemisphere_coordinate_outside_cortex_stays_outside(
     projector, mini_ccf
 ):
     """The complement: a point whose mirror has no streamline must have none.
 
     The outermost lateral voxel mirrors onto ``z = 0``, where the fixture has
-    no streamline. The voxel reflection sends it to ``z = 1`` instead, so a
-    depth is returned for a point that is not on any streamline.
+    no streamline. The superseded voxel reflection sent it to ``z = 1``
+    instead, so a depth came back for a point that is not on any streamline.
     """
     z_size = mini_ccf.volume_shape[2]
     lateral = sorted({int(v) for v in mini_ccf.path_starts[:, 2]})

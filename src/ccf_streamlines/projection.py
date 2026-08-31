@@ -1037,15 +1037,35 @@ class IsocortexCoordinateProjector:
         orig_voxels = coordinates_to_voxels(coords, resolution=self.resolution)
         voxels = orig_voxels.copy()
 
-        # Reflect voxels to left hemisphere since closest surface voxels are only
-        # defined on left side
+        # Reflect to the left hemisphere, since closest surface voxels are only
+        # defined on the left side. The voxel selects the streamline and the
+        # coordinate measures depth along it, so the two must land on the same
+        # voxel; when they did not, depth was measured along a neighbouring
+        # streamline (issue #27).
+        #
+        # `z_size * resolution - u` is the mirror of the point itself, so the
+        # voxel to use is simply the one that mirrored point falls in. Taking
+        # it that way rather than with a second formula in voxel space makes
+        # the two agree by construction. For a coordinate anywhere inside a
+        # voxel it is exactly `z_size - 1 - z` -- voxel z spans [z, z+1) with
+        # centre z + 0.5, and mirroring that centre about the midline plane at
+        # z_size / 2 gives (z_size - 1 - z) + 0.5 -- which is the same
+        # convention as the `np.flip(volume, axis=2)` of the volume projectors.
+        # Exactly on a voxel boundary the mirrored point falls in `z_size - z`
+        # instead, and that is the voxel it is really in.
+        #
+        # One mask, taken from the coordinates, decides which points are on the
+        # right for both reflections.
         z_size = self.volume_shape[2]
         z_midline = z_size / 2
-        voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
 
-        # Also reflect coordinates
+        on_right = coords[:, 2] > z_midline * self.resolution[2]
+
         reflect_coords = coords.copy()
-        reflect_coords[reflect_coords[:, 2] > z_midline * self.resolution[2], 2] = z_size * self.resolution[2] - reflect_coords[reflect_coords[:, 2] > z_midline * self.resolution[2], 2]
+        reflect_coords[on_right, 2] = z_size * self.resolution[2] - coords[on_right, 2]
+
+        voxels[on_right] = coordinates_to_voxels(
+            reflect_coords[on_right], resolution=self.resolution)
 
 
         # Find the surface voxels that best match the voxels
