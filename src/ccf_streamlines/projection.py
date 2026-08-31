@@ -2,6 +2,7 @@ import nrrd
 import h5py
 import logging
 import itertools
+import weakref
 import numpy as np
 import pandas as pd
 from ccf_streamlines.coordinates import coordinates_to_voxels
@@ -1349,6 +1350,74 @@ class IsocortexEntireProjector:
             return first_voxel_coords * self.resolution
 
 
+#: Lookups whose ordering has already been checked, held weakly so an entry
+#: disappears with its array and an `id` cannot be reused while its entry is live.
+_checked_lookup_orders = weakref.WeakValueDictionary()
+
+
+def _check_lookup_is_ordered(matching_voxel_lookup, lookup_ind, sorter):
+    """ Raise if the column `_matching_voxel_indices` searches is out of order.
+
+    `np.searchsorted` assumes non-decreasing keys and does not verify it, so an
+    unordered reference file used to yield wrong voxels rather than an error.
+
+    Checking costs one pass over the column - about 30 ms for the 61.9M-row
+    closest-surface-voxel table, against 0.04 ms for the lookup itself - and
+    `angle.find_closest_streamline` looks up a single voxel per call. So the result is
+    remembered per array instead of being recomputed on every lookup. The consequence
+    worth knowing: a lookup array reordered in place after its first use is not
+    re-checked.
+
+    Parameters
+    ----------
+    matching_voxel_lookup : array
+        The `(n, 2)` lookup being searched.
+    lookup_ind : int
+        Index of the column that is searched.
+    sorter : array or None
+        Ordering applied to that column, as passed to `np.searchsorted`. When given,
+        the column is checked in that order and the result is not remembered, since
+        the ordering belongs to the sorter as much as to the lookup.
+
+    Returns
+    -------
+    None
+
+    Raises
+    ------
+    ValueError
+        If the searched column does not increase monotonically.
+    """
+    column = matching_voxel_lookup[:, lookup_ind]
+
+    cache_key = None
+    if sorter is None:
+        cache_key = (id(matching_voxel_lookup), lookup_ind)
+        if _checked_lookup_orders.get(cache_key) is matching_voxel_lookup:
+            return
+    else:
+        column = column[sorter]
+
+    if column.shape[0] > 1:
+        out_of_order = column[1:] < column[:-1]
+        if out_of_order.any():
+            i = int(np.argmax(out_of_order)) + 1
+            in_sorter_order = "" if sorter is None else " in `sorter` order"
+            raise ValueError(
+                f"Lookup column {lookup_ind} must increase monotonically{in_sorter_order}; "
+                f"entry {i} ({column[i]}) is smaller than entry {i - 1} ({column[i - 1]}). "
+                "Matches are found by binary search, which returns wrong voxels for an "
+                "unordered column."
+            )
+
+    if cache_key is not None:
+        try:
+            _checked_lookup_orders[cache_key] = matching_voxel_lookup
+        except TypeError:
+            # Not weak-referenceable - a plain nested list, say. Check again next time.
+            pass
+
+
 def _matching_voxel_indices(
     voxel_inds,
     matching_voxel_lookup,
@@ -1356,16 +1425,31 @@ def _matching_voxel_indices(
     ref_ind=1,
     missing_value=0,
     sorter=None):
-    """ Finds matching (flattened) voxels in lookup. Missing values return `missing_value`."""
+    """ Finds matching (flattened) voxels in lookup. Missing values return `missing_value`.
+
+    The lookup column must be in increasing order, or in the order given by `sorter`
+    when one is supplied; `ValueError` is raised if it is not.
+    """
+    _check_lookup_is_ordered(matching_voxel_lookup, lookup_ind, sorter)
+
+    lookup_keys = matching_voxel_lookup[:, lookup_ind]
+    n_rows = lookup_keys.shape[0]
     matching_voxel_ind = np.ones_like(voxel_inds, dtype=int) * missing_value
-    has_match = np.isin(voxel_inds, matching_voxel_lookup[:, lookup_ind])
-    lookup_results_ind = np.searchsorted(
-        matching_voxel_lookup[:, lookup_ind],
-        voxel_inds[has_match],
-        sorter=sorter
-    )
+    if n_rows == 0:
+        return matching_voxel_ind
+
+    # One binary search answers both questions. `np.searchsorted` returns the left-hand
+    # insertion point, so a query is present exactly when the key sitting there equals
+    # it - the same answer `np.isin` gave, and it keeps the same tie-breaking, but
+    # without `np.isin`'s full pass over (and internal sort of) the lookup column. That
+    # column runs to tens of millions of rows in the real reference files and was being
+    # rescanned on every call, including calls that look up a single voxel.
+    lookup_results_ind = np.searchsorted(lookup_keys, voxel_inds, sorter=sorter)
+    in_range = lookup_results_ind < n_rows
+    lookup_rows = np.where(in_range, lookup_results_ind, 0)
     if sorter is not None:
-        matching_voxel_ind[has_match] = matching_voxel_lookup[sorter, ref_ind][lookup_results_ind]
-    else:
-        matching_voxel_ind[has_match] = matching_voxel_lookup[lookup_results_ind, ref_ind]
+        lookup_rows = sorter[lookup_rows]
+    has_match = in_range & (lookup_keys[lookup_rows] == voxel_inds)
+
+    matching_voxel_ind[has_match] = matching_voxel_lookup[lookup_rows[has_match], ref_ind]
     return matching_voxel_ind

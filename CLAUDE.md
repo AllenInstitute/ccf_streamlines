@@ -114,9 +114,21 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
 - `region_masks` accepts `hemisphere="left_for_both"` but `region_boundaries` does not
   handle it (it falls through to the un-shifted "left" case). The two methods share
   `_validate_inputs` but not their supported values.
-- `_matching_voxel_indices` (`projection.py:1345`) uses `np.searchsorted` with no `sorter`
-  in most call sites, so the reference file's lookup column is assumed pre-sorted. Nothing
-  checks this; an unsorted reference file yields wrong voxels, not an error.
+- `_matching_voxel_indices` (`projection.py`) resolves voxels with `np.searchsorted`, and
+  the *same* binary search decides whether a query matched at all, by comparing against
+  the key at the insertion point — do not reintroduce an `np.isin` membership test. It
+  walks the whole key column, 61.9M rows in `closest_surface_voxel_lookup.h5`, and
+  `angle.find_closest_streamline` calls the helper once per coordinate, so that cost
+  would be paid per point (12.5 s each, measured).
+- `searchsorted` needs that column ordered and does not verify it, so
+  `_check_lookup_is_ordered` does, raising `ValueError` naming the first out-of-order
+  entry. It runs inside `_matching_voxel_indices`, covering both the plain column and the
+  `sorter` order. The scan is O(rows) — ~74 ms on the 61.9M-row table against 0.03 ms for
+  a lookup — so the result is memoised per array in the module-level
+  `_checked_lookup_orders` (a `WeakValueDictionary`, keyed on `id`, values weak so an
+  entry dies with its array). Dropping that cache silently restores a per-coordinate
+  O(rows) cost. The trade-off it buys: a lookup reordered *in place* after its first use
+  is not re-checked; `tests/test_matching_voxel_indices.py` pins that.
 - The isocortex layer names have one definition, module-level `projection.ISOCORTEX_LAYER_KEYS`
   (issue #26). Both projector classes bind their `ISOCORTEX_LAYER_KEYS` class attribute to it
   and `metrics.LAYER_LABELS` zips it against `metrics.ISOCORTEX_LAYER_STRUCTURE_SET_IDS`, so
