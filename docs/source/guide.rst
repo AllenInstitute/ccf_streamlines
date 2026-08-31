@@ -19,6 +19,29 @@ memory issues depending on the capabilities of your machine, how many data sets
 or projections you try to use at once, etc.
 
 
+Installation
+------------
+
+``ccf_streamlines`` is published on PyPI and requires Python 3.9 or newer.
+
+.. code:: bash
+
+    pip install ccf-streamlines
+
+The package is imported by submodule, since the top-level package exports only
+``__version__``:
+
+.. code:: python3
+
+    import ccf_streamlines.projection as ccfproj
+
+Installing the package does not bring down any reference data. The streamline,
+view lookup, and atlas files that every projector needs are downloaded
+separately, and are listed in :ref:`Data Files`. The examples throughout this
+guide also use `matplotlib <https://matplotlib.org>`_ for plotting, which is not
+a dependency of the package.
+
+
 What are streamlines?
 ---------------------
 
@@ -51,10 +74,10 @@ Projecting a volume to 2D
 
 This section will present how to use the ``ccf_streamlines`` package to project
 3D CCF-aligned data to two-dimensional views. As an example, we will use the
-`10-micron resolution average template data <http://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/average_template/average_template_10.nrrd>`_ for the CCF.
+`10-micron resolution average template data <https://download.alleninstitute.org/informatics-archive/current-release/mouse_ccf/average_template/average_template_10.nrrd>`_ for the CCF.
 (**note:** this file is ~300 MB). The file is in the NRRD format.
 
-After downloading the file to the director we're working in, we can load it into a 3D NumPy array.
+After downloading the file to the directory we're working in, we can load it into a 3D NumPy array.
 
 .. code:: python3
 
@@ -83,7 +106,7 @@ process the 3D data.
         "surface_paths_10_v3.h5",
 
         # Specify that we want to project both hemispheres
-        hemisphere="both"
+        hemisphere="both",
 
         # The top view contains space for the right hemisphere, but is empty.
         # Therefore, we tell the projector to put both hemispheres side-by-side
@@ -221,15 +244,15 @@ from different angles, as with the other view types). In this case, we may be
 interested not only in viewing our data across the cortical surface, but also
 throughout the (flattened) cortical depth.
 
-We'll use an `Allen Mouse Brain Connectivity Atlas <http://connectivity.brain-map.org>`_
+We'll use an `Allen Mouse Brain Connectivity Atlas <https://connectivity.brain-map.org>`_
 as an example, since we'll be able to see processes that travel perpendicular
 to the cortical surface (e.g., apical dendrites of labeled neurons).
 
-We'll look at `this experiment <http://connectivity.brain-map.org/projection/experiment/297231636>`_
+We'll look at `this experiment <https://connectivity.brain-map.org/projection/experiment/297231636>`_
 in which cells labeled by the Tlx-Cre driver (primarily excitatory neurons in layer 5a of cortex)
 in the visual area VISal are fluorescent. You can download the projection data with this link:
 
-http://api.brain-map.org/grid_data/download_file/297231636??image=projection_density&resolution=10
+https://api.brain-map.org/grid_data/download_file/297231636??image=projection_density&resolution=10
 
 Once that is downloaded, we will load it as we did the average template.
 
@@ -278,12 +301,12 @@ in 3D.
         view_space_for_other_hemisphere='flatmap_butterfly',
 
         # Additional information for thickness calculations
-        thickness_type="normalized_layers", # each layer will have the same thickness everwhere
+        thickness_type="normalized_layers", # each layer will have the same thickness everywhere
         layer_thicknesses=layer_thicknesses,
         streamline_layer_thickness_file="cortical_layers_10_v2.h5",
     )
 
-Once we have it set up, we can project the data in the same was as in 2D.
+Once we have it set up, we can project the data in the same way as in 2D.
 
 .. code:: python3
 
@@ -523,7 +546,7 @@ class. It is set up in a similar way to the other projectors.
 .. code:: python3
 
     ccf_coord_proj = ccfproj.IsocortexCoordinateProjector(
-        projection_file="flatmap_buttefly.h5",
+        projection_file="flatmap_butterfly.h5",
         surface_paths_file="surface_paths_10_v3.h5",
         closest_surface_voxel_reference_file="closest_surface_voxel_lookup.h5",
         layer_thicknesses=layer_thicknesses,
@@ -596,12 +619,12 @@ Projecting a lower-resolution ISH volume
 ----------------------------------------
 
 The ``ccf_streamlines`` packages also has functions for using the lower-resolution
-data from the `Allen Brain Atlas <http://mouse.brain-map.org>`_ of mouse
+data from the `Allen Brain Atlas <https://mouse.brain-map.org>`_ of mouse
 in situ hybridization (ISH) gene expression with its objects and functions.
 
 We can download an example coronal data set for the Pdyn gene with this link:
 
-http://api.brain-map.org/grid_data/download/71717084
+https://api.brain-map.org/grid_data/download/71717084
 
 After unzipping the downloaded file, there will be ``energy.mhd`` and ``energy.raw``
 files that contain the 3D gene expression information. You can use the ``SimpleITK``
@@ -648,4 +671,4 @@ Now we can project the data as before.
     :width: 800
 
 
-.. _whitepaper: http://help.brain-map.org/download/attachments/2818171/Conn_Informatics_Data_Processing.pdf?version=2&modificationDate=1507057121463&api=v2
+.. _whitepaper: https://s3.amazonaws.com/webflow-prod-assets/689cfbd308fa7373b604d290/68ee79702e0b8128cafcc5f5_Documentation_Mouse_Connectivity_Atlas-Mouse_CCF,_Reference_Atlas,_Version_3_(2017).pdf
