@@ -57,15 +57,24 @@ def find_closest_streamline(
     else:
         closest_surface_voxels = closest_surface_voxel_reference
 
-    voxel = np.squeeze(coordinates_to_voxels(coord))
+    voxel = np.squeeze(coordinates_to_voxels(coord, resolution=resolution))
 
     # Reference file data only present on left side, so flip to left side
-    # if voxel is on the right
+    # if voxel is on the right. Voxel z spans [z, z+1) with centre z + 0.5, so
+    # mirroring that centre about the midline plane at z_size / 2 gives the
+    # centre of voxel z_size - 1 - z -- the same convention as the
+    # `np.flip(volume, axis=2)` of the volume projectors. The reflection below
+    # that puts the answer back on the right must use it too, so that the two
+    # are inverses.
+    #
+    # The midline test is on z_size - 1, the largest voxel index, not z_size:
+    # for an even z_size the first right-hand voxel is z_size / 2 itself, and
+    # testing `> z_size / 2` left it unreflected and so absent from the
+    # left-only reference.
     z_size = volume_shape[2]
-    z_midline = z_size / 2
     flip_hemisphere = False
-    if voxel[2] > z_midline:
-        voxel[2] = z_size - voxel[2]
+    if voxel[2] > (z_size - 1) / 2:
+        voxel[2] = z_size - 1 - voxel[2]
         flip_hemisphere = True
 
     voxel_ind = np.ravel_multi_index(
@@ -107,8 +116,9 @@ def find_closest_streamline(
         path, volume_shape)
     streamline_coords = np.array(streamline_coords).T
     if flip_hemisphere:
-        # Put streamline on same hemisphere as original voxel
-        streamline_coords[:, 2] = z_size - streamline_coords[:, 2]
+        # Put streamline on same hemisphere as original voxel, undoing the
+        # reflection above exactly.
+        streamline_coords[:, 2] = z_size - 1 - streamline_coords[:, 2]
 
     # Scale to microns
     streamline_coords = streamline_coords * np.array(resolution)

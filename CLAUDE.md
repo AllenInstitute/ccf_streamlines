@@ -83,7 +83,7 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
 
 - NumPy-style docstrings with `Parameters`/`Returns` on every public function and class;
   AST-checked all 9 modules, the only two without one are `BoundaryFinder.region_masks`
-  (`projection.py:628`) and `angle.vector_to_3d_affine_matrix` (`angle.py:8`).
+  (`projection.py:660`) and `angle.vector_to_3d_affine_matrix` (`angle.py:8`).
 - Argument validation is explicit `if x not in {...}: raise ValueError(f"...")` at the top
   of public methods; there is no custom exception type anywhere, and the only `except` in
   `src/` is the `PackageNotFoundError` guard in `__init__.py`. Follow the `ValueError`
@@ -93,7 +93,7 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
   `__version__` (via `importlib.metadata`), so callers always import the submodule.
 - Diagnostics go through the root logger as `logging.info(...)` / `logging.warning(...)`,
   not a module-level `logger` — but progress bars print directly (`print("loading path
-  information")` in `projection.py:105` and `:976`, plus `tqdm`), so the library is not
+  information")` in `projection.py:126` and `:1022`, plus `tqdm`), so the library is not
   silent by default.
 - Volume shape `(1320, 800, 1140)` and resolution `(10, 10, 10)` are repeated as literal
   defaults in `angle.py`, `dataset.py`, and `morphology.py`; there is no shared constant.
@@ -103,11 +103,10 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
 
 ## Gotchas
 
-- **`project_volume` mutates the caller's array.** For `kind="max"`/`"min"` it writes a
-  sentinel into `volume.flat[0]` (`projection.py:179`, `:1219`) and never restores it. With
-  `hemisphere="both"` the second pass writes through the `np.flip` *view*, so
-  `volume[0, 0, -1]` is clobbered too (verified). Copy the volume before projecting if you
-  need it intact.
+- `project_volume` used to write a `kind="max"`/`"min"` sentinel into the caller's
+  `volume.flat[0]` and never restore it (issue #20). The substitution is now made in the
+  gathered copy, so the caller's array is left alone — `tests/test_project_volume_mutation.py`
+  holds that line.
 - `kind` and `scale` are validated at the top of `project_volume` (both projectors) and
   `IsocortexEntireProjector.top_of_streamline_coords` (issue #21). The dispatch chains
   below them still have no `else`, so any *new* accepted value must be added in both
@@ -115,17 +114,38 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
 - `region_masks` accepts `hemisphere="left_for_both"` but `region_boundaries` does not
   handle it (it falls through to the un-shifted "left" case). The two methods share
   `_validate_inputs` but not their supported values.
-- `_matching_voxel_indices` (`projection.py:1264`) uses `np.searchsorted` with no `sorter`
+- `_matching_voxel_indices` (`projection.py:1345`) uses `np.searchsorted` with no `sorter`
   in most call sites, so the reference file's lookup column is assumed pre-sorted. Nothing
   checks this; an unsorted reference file yields wrong voxels, not an error.
+- The isocortex layer names have one definition, module-level `projection.ISOCORTEX_LAYER_KEYS`
+  (issue #26). Both projector classes bind their `ISOCORTEX_LAYER_KEYS` class attribute to it
+  and `metrics.LAYER_LABELS` zips it against `metrics.ISOCORTEX_LAYER_STRUCTURE_SET_IDS`, so
+  a thickness file `metrics` writes is always keyed the way the projectors read it. Edit the
+  one list; `tests/test_layer_key_constants.py` asserts identity, not just equality.
+- `IsocortexCoordinateProjector` mirrors a right-hemisphere query by reflecting the micron
+  coordinate (`z_size * resolution - u`) and then taking the voxel that mirrored point falls
+  in, rather than reflecting the voxel with a second formula (issue #27). The voxel picks the
+  streamline and the coordinate measures depth along it, so the two must land on the same
+  voxel; deriving one from the other makes that structural. Inside a voxel this is exactly
+  `z_size - 1 - z`, the volume projectors' `np.flip(volume, axis=2)` convention; the old
+  `z_size - z` was one voxel out. One mask, taken from the coordinates, drives both — the
+  two masks used to disagree throughout the midline voxel.
+- `angle.find_closest_streamline` mirrors the same way, but with the plain `z_size - 1 - z`
+  in both directions (issue #33) — the query voxel onto the left, and the streamline back
+  onto the right. Both ends are voxel-to-voxel there, so the plain formula round-trips
+  exactly and the coordinate-derived form of #27 is not needed; it would in fact be worse,
+  returning a streamline from the neighbouring voxel for a query on a voxel boundary. Its
+  midline test is `voxel[2] > (z_size - 1) / 2`, not `> z_size / 2`: for an even `z_size`
+  the first right-hand voxel is `z_size / 2` itself, and the old test left it unreflected
+  and so absent from the left-only reference, which reported it as outside isocortex.
 - `metrics.measure_streamline_layer_thicknesses` re-implements path deduplication inline
   with a Python loop instead of calling `processing.remove_duplicate_voxels_from_paths`,
   which is vectorized and has zero callers in the repo. The layer-sorting hack right below
-  it is flagged as such in its own comment (`metrics.py:68`).
+  it is flagged as such in its own comment (`metrics.py:76`).
 - `.python-version` (pinning 3.9) is **gitignored**, so a fresh clone is not pinned — `uv sync`
   there resolves to whatever interpreter uv finds (3.13 in this checkout). Nothing tests 3.9.
 - Dead imports: `itertools` in `projection.py`; `h5py`, `nrrd`, `pandas`, `logging`, and
-  `tqdm` in `metrics.py` (only `numpy` is used there).
+  `tqdm` in `metrics.py` (only `numpy` and the shared layer-key import are used there).
 - `docs/source/reference/processing.rst` titles itself `ccf_streamlines.projection` — wrong
   module name in the heading.
 - A stale, untracked `ccf_streamlines.egg-info/` sits in the repo root from the pre-uv

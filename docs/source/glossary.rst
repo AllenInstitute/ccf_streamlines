@@ -58,7 +58,9 @@ than by a thread.
 
         ``volume lookup``
             A 3-D, CCF-shaped dataset in the *superseded* surface-paths files.
-            It no longer exists in the current assets.
+            It no longer exists in the current assets, and nothing in the
+            library reads it: ``project_path_ordered_data``, its last reader,
+            uses the projector's ``path_ordering`` instead.
 
     closest surface voxel
         A lookup mapping any voxel inside isocortex to the

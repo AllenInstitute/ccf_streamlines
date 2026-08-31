@@ -19,6 +19,21 @@ HEMISPHERE_SPACE_VIEW_LOOKUP = {
     "rotated": 390,
 }
 
+#: Isocortex layer names, in pia-to-white-matter order.
+#:
+#: These are the keys of a streamline layer thickness file, so
+#: `ccf_streamlines.metrics.measure_streamline_layer_thicknesses`, which writes
+#: one, and the projector classes below, which read one back, must agree on
+#: them exactly. They share this list rather than repeating it.
+ISOCORTEX_LAYER_KEYS = [
+    'Isocortex layer 1',
+    'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
+    'Isocortex layer 4',
+    'Isocortex layer 5',
+    'Isocortex layer 6a',
+    'Isocortex layer 6b'
+]
+
 
 class Isocortex2dProjector:
     """ 2D projection of common cortical framework volumes
@@ -219,10 +234,12 @@ class Isocortex2dProjector:
         projection : array
             2D projection of data
         """
-        with h5py.File(self.surface_paths_file, "r") as path_f:
-            ordered_data = data[
-                path_f["volume lookup"][:].flat[self.view_lookup[:, 1]]
-            ]
+        # `path_ordering`, built at construction, is already the path index for
+        # each view entry -- the same thing as looking `view_lookup[:, 1]` up in
+        # the volume lookup, without reading the 1.2-billion-element dataset
+        # back in. The 3-D "volume lookup" form it used to read does not exist
+        # in the current-generation surface paths file at all.
+        ordered_data = data[self.path_ordering]
 
         projection = np.zeros(self.view_size, dtype=data.dtype)
         projection.flat[self.view_lookup[:, 0]] = ordered_data
@@ -271,14 +288,9 @@ class Isocortex3dProjector(Isocortex2dProjector):
         Number of entries read from the volume lookup at a time while ordering
         the paths to match the view.
     """
-    ISOCORTEX_LAYER_KEYS = [
-        'Isocortex layer 1',
-        'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
-        'Isocortex layer 4',
-        'Isocortex layer 5',
-        'Isocortex layer 6a',
-        'Isocortex layer 6b'
-    ]
+    #: The module-level list, kept as a class attribute for callers that
+    #: reach for it there.
+    ISOCORTEX_LAYER_KEYS = ISOCORTEX_LAYER_KEYS
 
     def __init__(self,
         projection_file,
@@ -620,8 +632,10 @@ class BoundaryFinder:
             contours = find_contours(region_raster, level=0.5)
 
             if len(contours) == 0:
-                # No contours found
-                boundaries[acronym] = np.array([])
+                # No contours found. Shaped (0, 2) rather than (0,) so that the
+                # hemisphere reflection below is a no-op instead of an
+                # IndexError.
+                boundaries[acronym] = np.empty((0, 2))
             elif len(contours) == 1:
                 boundaries[acronym] = contours[0]
             else:
@@ -737,14 +751,9 @@ class IsocortexCoordinateProjector:
         down; the default is suitable for the full-size reference files.
     """
 
-    ISOCORTEX_LAYER_KEYS = [
-        'Isocortex layer 1',
-        'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
-        'Isocortex layer 4',
-        'Isocortex layer 5',
-        'Isocortex layer 6a',
-        'Isocortex layer 6b'
-    ]
+    #: The module-level list, kept as a class attribute for callers that
+    #: reach for it there.
+    ISOCORTEX_LAYER_KEYS = ISOCORTEX_LAYER_KEYS
 
     def __init__(self,
         surface_paths_file,
@@ -782,7 +791,11 @@ class IsocortexCoordinateProjector:
             with h5py.File(projection_file, "r") as proj_f:
                 self.view_lookup = proj_f["view lookup"][:]
                 self.view_size = proj_f.attrs["view size"][:]
-
+        else:
+            # Documented: without a projection file only depth information is
+            # available. `project_coordinates` checks these and says so.
+            self.view_lookup = None
+            self.view_size = None
 
         self.resolution = resolution
 
@@ -844,6 +857,12 @@ class IsocortexCoordinateProjector:
         projected_coords : (N, 3) array
             3D flattened projected coordinates
         """
+        if self.view_lookup is None:
+            raise ValueError(
+                "`project_coordinates` requires a `projection_file`, which was "
+                "not given when this projector was constructed; without one, "
+                "only `project_depths` is available"
+            )
         if scale not in {"voxels", "microns"}:
             raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
         if hemisphere not in {"both", "both_mirrored", "right", "left"}:
@@ -1018,15 +1037,35 @@ class IsocortexCoordinateProjector:
         orig_voxels = coordinates_to_voxels(coords, resolution=self.resolution)
         voxels = orig_voxels.copy()
 
-        # Reflect voxels to left hemisphere since closest surface voxels are only
-        # defined on left side
+        # Reflect to the left hemisphere, since closest surface voxels are only
+        # defined on the left side. The voxel selects the streamline and the
+        # coordinate measures depth along it, so the two must land on the same
+        # voxel; when they did not, depth was measured along a neighbouring
+        # streamline (issue #27).
+        #
+        # `z_size * resolution - u` is the mirror of the point itself, so the
+        # voxel to use is simply the one that mirrored point falls in. Taking
+        # it that way rather than with a second formula in voxel space makes
+        # the two agree by construction. For a coordinate anywhere inside a
+        # voxel it is exactly `z_size - 1 - z` -- voxel z spans [z, z+1) with
+        # centre z + 0.5, and mirroring that centre about the midline plane at
+        # z_size / 2 gives (z_size - 1 - z) + 0.5 -- which is the same
+        # convention as the `np.flip(volume, axis=2)` of the volume projectors.
+        # Exactly on a voxel boundary the mirrored point falls in `z_size - z`
+        # instead, and that is the voxel it is really in.
+        #
+        # One mask, taken from the coordinates, decides which points are on the
+        # right for both reflections.
         z_size = self.volume_shape[2]
         z_midline = z_size / 2
-        voxels[voxels[:, 2] > z_midline, 2] = z_size - voxels[voxels[:, 2] > z_midline, 2]
 
-        # Also reflect coordinates
+        on_right = coords[:, 2] > z_midline * self.resolution[2]
+
         reflect_coords = coords.copy()
-        reflect_coords[reflect_coords[:, 2] > z_midline * self.resolution[2], 2] = z_size * self.resolution[2] - reflect_coords[reflect_coords[:, 2] > z_midline * self.resolution[2], 2]
+        reflect_coords[on_right, 2] = z_size * self.resolution[2] - coords[on_right, 2]
+
+        voxels[on_right] = coordinates_to_voxels(
+            reflect_coords[on_right], resolution=self.resolution)
 
 
         # Find the surface voxels that best match the voxels
