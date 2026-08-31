@@ -103,14 +103,15 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
 
 ## Gotchas
 
-- `project_volume` used to mutate the caller's array for `kind="max"`/`"min"`, writing a
-  sentinel into `volume.flat[0]` and never restoring it (issue #20). It now substitutes the
-  extreme value into the *gathered copy* instead — `values[self.paths == 0] = min_val` —
-  so the input is untouched and read-only volumes work. Both `Isocortex2dProjector` and
-  `IsocortexEntireProjector` were affected; `tests/test_project_volume_mutation.py` pins it.
-- **Unknown `kind` fails silently or obscurely.** `_project_volume_to_view` has no `else`
-  branch, so a typo'd `kind` returns an all-zeros view; `IsocortexEntireProjector.project_volume`
-  hits `UnboundLocalError` on `values` instead.
+- **`project_volume` mutates the caller's array.** For `kind="max"`/`"min"` it writes a
+  sentinel into `volume.flat[0]` (`projection.py:179`, `:1219`) and never restores it. With
+  `hemisphere="both"` the second pass writes through the `np.flip` *view*, so
+  `volume[0, 0, -1]` is clobbered too (verified). Copy the volume before projecting if you
+  need it intact.
+- `kind` and `scale` are validated at the top of `project_volume` (both projectors) and
+  `IsocortexEntireProjector.top_of_streamline_coords` (issue #21). The dispatch chains
+  below them still have no `else`, so any *new* accepted value must be added in both
+  places or it silently returns zeros / `None`.
 - `region_masks` accepts `hemisphere="left_for_both"` but `region_boundaries` does not
   handle it (it falls through to the un-shifted "left" case). The two methods share
   `_validate_inputs` but not their supported values.

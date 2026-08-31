@@ -138,6 +138,10 @@ class Isocortex2dProjector:
             2D projection of input volume
         """
 
+        if kind not in {"max", "min", "mean", "average", "sum"}:
+            raise ValueError(
+                f"`kind` must be 'max', 'min', 'mean', 'average', or 'sum'; was {kind}")
+
         if self.hemisphere == "left":
             projected_volume = self._project_volume_to_view(volume, kind)
             if self.view_space_for_other_hemisphere > 0:
@@ -1233,6 +1237,10 @@ class IsocortexEntireProjector:
         values : array
             Linear array of the result of the operation for each streamline
         """
+        if kind not in {"max", "min", "mean", "average", "sum"}:
+            raise ValueError(
+                f"`kind` must be 'max', 'min', 'mean', 'average', or 'sum'; was {kind}")
+
         if volume.shape != self.volume_shape:
             raise ValueError(
                 f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}")
@@ -1288,6 +1296,8 @@ class IsocortexEntireProjector:
             Coordinates of the voxel at the start of each streamline. The order is the same
             as `values`.
         """
+        if scale not in {"voxels", "microns"}:
+            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
 
         first_voxels = self.paths[:, 0]
         first_voxel_coords = np.unravel_index(
