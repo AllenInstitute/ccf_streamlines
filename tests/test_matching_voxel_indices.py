@@ -90,18 +90,12 @@ def test_a_sorter_makes_an_unsorted_key_column_searchable():
     assert np.array_equal(result, np.array([2, 3]))
 
 
-def test_without_a_sorter_an_unsorted_lookup_returns_wrong_answers_silently():
-    """Characterization, not an endorsement.
+def test_without_a_sorter_an_unsorted_lookup_raises():
+    """This used to return a wrong voxel, silently.
 
-    ``np.searchsorted`` assumes a sorted array and does not check. Nothing in
-    the package validates the reference file's ordering, so an unsorted lookup
-    yields a wrong answer rather than an error. Documented here so the
-    assumption is visible.
-
-    Since membership is read off the same binary search, a query the search
-    lands next to a non-matching key is now reported missing rather than
-    resolved to an unrelated row. Still silent, still wrong -- do not read this
-    as the ordering being checked.
+    ``np.searchsorted`` assumes a sorted array and does not verify it, so an
+    out-of-order reference file produced wrong matches rather than an error.
+    The same query is fine once a ``sorter`` supplies the ordering.
     """
     unsorted = np.array([
         [1, 300],
@@ -110,16 +104,74 @@ def test_without_a_sorter_an_unsorted_lookup_returns_wrong_answers_silently():
         [4, 200],
     ])
 
-    without_sorter = _matching_voxel_indices(
-        np.array([100]), unsorted, lookup_ind=1, ref_ind=0, missing_value=-1
-    )
+    with pytest.raises(ValueError, match="must increase monotonically"):
+        _matching_voxel_indices(
+            np.array([100]), unsorted, lookup_ind=1, ref_ind=0, missing_value=-1
+        )
+
     with_sorter = _matching_voxel_indices(
         np.array([100]), unsorted, lookup_ind=1, ref_ind=0, missing_value=-1,
         sorter=np.argsort(unsorted[:, 1]),
     )
-
     assert with_sorter[0] == 2
-    assert without_sorter[0] != with_sorter[0]
+
+
+def test_the_error_names_the_first_out_of_order_entry():
+    """So a bad reference file can be located, not just rejected."""
+    lookup = np.column_stack([np.array([10, 20, 30, 25, 40]), np.arange(5)])
+
+    with pytest.raises(ValueError) as excinfo:
+        _matching_voxel_indices(np.array([30]), lookup)
+
+    message = str(excinfo.value)
+    assert "entry 3 (25)" in message
+    assert "entry 2 (30)" in message
+
+
+def test_a_sorter_that_does_not_sort_raises():
+    """The ordering can come from the sorter, so the sorter is checked too."""
+    lookup = np.column_stack([np.array([30, 10, 20]), np.arange(3)])
+
+    with pytest.raises(ValueError, match="in `sorter` order"):
+        _matching_voxel_indices(
+            np.array([10]), lookup, sorter=np.arange(3))
+
+    ok = _matching_voxel_indices(
+        np.array([10]), lookup, sorter=np.argsort(lookup[:, 0]))
+    assert ok[0] == 1
+
+
+def test_equal_neighbouring_keys_are_ordered(lookup):
+    """Monotonic means non-decreasing -- ties are legal and common."""
+    tied = np.column_stack([np.array([10, 10, 20, 20, 20]), np.arange(5)])
+    assert _matching_voxel_indices(np.array([20]), tied)[0] == 2
+
+
+def test_a_single_row_lookup_is_ordered():
+    single = np.array([[7, 70]])
+    assert _matching_voxel_indices(np.array([7, 8]), single, missing_value=-1).tolist() == [70, -1]
+
+
+def test_the_ordering_check_is_remembered_per_array():
+    """Characterization of the cost trade-off, and a warning.
+
+    Checking is a pass over the column -- ~30 ms for the real 61.9M-row table,
+    against 0.04 ms for the lookup itself -- and
+    ``angle.find_closest_streamline`` looks one voxel up per call. So the answer
+    is cached per array, which means an array reordered *in place* after its
+    first successful use is not re-checked. Reference files are read once and
+    left alone, so this is a fair trade; do not "fix" it by dropping the cache
+    without restoring the per-call cost.
+    """
+    lookup = np.column_stack([np.array([10, 20, 30]), np.array([1, 2, 3])])
+    assert _matching_voxel_indices(np.array([20]), lookup)[0] == 2
+
+    lookup[:, 0] = [30, 20, 10]
+    _matching_voxel_indices(np.array([20]), lookup)  # no raise: already checked
+
+    # a fresh array with the same contents is checked, and rejected
+    with pytest.raises(ValueError, match="must increase monotonically"):
+        _matching_voxel_indices(np.array([20]), lookup.copy())
 
 
 def test_a_tie_resolves_to_the_first_row_in_sorter_order():
