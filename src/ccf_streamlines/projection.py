@@ -180,14 +180,17 @@ class Isocortex2dProjector:
         if kind == "max":
             # The path specification assumes the first point in the volume is not a
             # valid data point and so should be ignored. Since we are doing a
-            # maximum projection, we set that to the minimum possible value
-            # so that it won't be selected
-            volume.flat[0] = min_val
-            projected_volume.flat[self.view_lookup[:, 0]] = volume.flat[self.paths].max(axis=1)
+            # maximum projection, we set the padded entries to the minimum possible
+            # value so that they won't be selected. The substitution is made in the
+            # gathered copy, so the caller's volume is not modified.
+            values = volume.flat[self.paths]
+            values[self.paths == 0] = min_val
+            projected_volume.flat[self.view_lookup[:, 0]] = values.max(axis=1)
         elif kind == "min":
             # Same thing as above, just set to maximum instead of minimum
-            volume.flat[0] = max_val
-            projected_volume.flat[self.view_lookup[:, 0]] = volume.flat[self.paths].min(axis=1)
+            values = volume.flat[self.paths]
+            values[self.paths == 0] = max_val
+            projected_volume.flat[self.view_lookup[:, 0]] = values.min(axis=1)
         elif kind == "mean" or kind == "average":
             projected_volume.flat[self.view_lookup[:, 0]] = np.nanmean(
                 np.where(self.paths > 0, volume.flat[self.paths], np.nan),
@@ -1247,14 +1250,17 @@ class IsocortexEntireProjector:
         if kind == "max":
             # The path specification assumes the first point in the volume is not a
             # valid data point and so should be ignored. Since we are doing a
-            # maximum projection, we set that to the minimum possible value
-            # so that it won't be selected
-            volume.flat[0] = min_val
-            values = volume.flat[self.paths].max(axis=1)
+            # maximum projection, we set the padded entries to the minimum possible
+            # value so that they won't be selected. The substitution is made in the
+            # gathered copy, so the caller's volume is not modified.
+            path_values = volume.flat[self.paths]
+            path_values[self.paths == 0] = min_val
+            values = path_values.max(axis=1)
         elif kind == "min":
             # Same thing as above, just set to maximum instead of minimum
-            volume.flat[0] = max_val
-            values = volume.flat[self.paths].min(axis=1)
+            path_values = volume.flat[self.paths]
+            path_values[self.paths == 0] = max_val
+            values = path_values.min(axis=1)
         elif kind == "mean" or kind == "average":
             values = np.nanmean(
                 np.where(self.paths > 0, volume.flat[self.paths], np.nan),
