@@ -22,10 +22,17 @@ and asserted at build time (see ``_check_invariants``), so an invalid override
 fails immediately with a readable message rather than as a reshape error deep
 inside library code.
 
-The on-disk format here was established by inspecting the real assets, not by
-trusting ``data_file_info.md``, which described a superseded generation of the
-files. See ``docs/decisions/0001-mini-ccf-fixtures.md`` for the reasoning and
-``data_file_info.md`` for the corrected format description.
+The on-disk format was established by inspecting the real assets directly. Two
+properties are easy to get wrong and are called out where they are relied on
+below: the flat volume lookup is populated *only at streamline start voxels*
+(~0.12% fill), and a streamline's layer thicknesses sum to its arc length plus
+exactly one voxel.
+
+This module is the format description. Everything it assumes is restated as an
+assertion against the real files in ``tests/test_real_data.py``, so a claim
+here that stops being true fails a test rather than quietly misleading the next
+reader. ``docs/decisions/0001-mini-ccf-fixtures.md`` has the reasoning behind
+the approach.
 """
 
 import json
