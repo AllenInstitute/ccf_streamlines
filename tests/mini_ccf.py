@@ -205,9 +205,9 @@ class MiniCCF:
     def volume(self, dtype=np.float64):
         """A fresh zero volume of the right shape on *every* call.
 
-        ``project_volume`` writes a sentinel into ``volume.flat[0]`` and never
-        restores it, so tests that share one volume leak state into each other.
-        Always call this rather than caching the result.
+        ``project_volume`` no longer writes into its input (issue #20), but a
+        volume is still mutable caller state, so call this rather than caching
+        the result and letting tests share one.
         """
         return np.zeros(self.volume_shape, dtype=dtype)
 

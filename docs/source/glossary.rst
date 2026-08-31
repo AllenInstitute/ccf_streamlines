@@ -38,8 +38,9 @@ than by a thread.
 
         **Flat index 0 is reserved.** It doubles as the right-padding value in
         ``paths``, so ``paths > 0`` is the validity mask everywhere, and
-        ``project_volume`` overwrites ``volume.flat[0]`` with a sentinel before
-        a max or min reduction.
+        ``project_volume`` substitutes a sentinel for the padded entries -- in
+        the gathered copy, not in the caller's volume -- before a max or min
+        reduction.
 
     surface voxel
         The first voxel of a :term:`streamline` - the one at the pia. The
