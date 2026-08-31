@@ -217,7 +217,6 @@ def test_the_obvious_version_of_this_test_would_prove_nothing(mini_ccf):
     assert sorted(default.tolist()) == sorted(stable.tolist())
 
 
-@pytest.mark.xfail(strict=True, reason=PR11)
 def test_2d_coordinates_are_independent_of_sort_tie_order(
     mini_ccf, coordinate_projector, monkeypatch
 ):
