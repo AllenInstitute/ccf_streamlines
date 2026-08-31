@@ -14,12 +14,6 @@ import pytest
 
 from ccf_streamlines.projection import BoundaryFinder
 
-ABSENT_REGION_REFLECTION = (
-    "AllenInstitute/ccf_streamlines#25: reflecting a region that is in the labels file but absent from the atlas "
-    "indexes the empty array it was given as if it were 2-D, raising "
-    "IndexError; remove this marker when it is fixed"
-)
-
 
 @pytest.fixture
 def finder(mini_ccf):
@@ -213,7 +207,6 @@ def test_an_unknown_named_view_raises(finder):
 # -- defects ---------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason=ABSENT_REGION_REFLECTION)
 @pytest.mark.parametrize("hemisphere", ["right", "right_for_both"])
 def test_reflecting_a_region_absent_from_the_atlas_degrades_predictably(
     finder, mini_ccf, hemisphere
@@ -232,7 +225,6 @@ def test_reflecting_a_region_absent_from_the_atlas_degrades_predictably(
     assert boundaries[mini_ccf.absent_region_acronym].size == 0
 
 
-@pytest.mark.xfail(strict=True, reason=ABSENT_REGION_REFLECTION)
 def test_a_present_and_an_absent_region_can_be_requested_together(
     finder, mini_ccf
 ):

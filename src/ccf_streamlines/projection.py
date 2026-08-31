@@ -620,8 +620,10 @@ class BoundaryFinder:
             contours = find_contours(region_raster, level=0.5)
 
             if len(contours) == 0:
-                # No contours found
-                boundaries[acronym] = np.array([])
+                # No contours found. Shaped (0, 2) rather than (0,) so that the
+                # hemisphere reflection below is a no-op instead of an
+                # IndexError.
+                boundaries[acronym] = np.empty((0, 2))
             elif len(contours) == 1:
                 boundaries[acronym] = contours[0]
             else:
