@@ -10,12 +10,6 @@ import pytest
 
 from ccf_streamlines.projection import HEMISPHERE_SPACE_VIEW_LOOKUP, Isocortex2dProjector
 
-MISSING_DATASET = (
-    "AllenInstitute/ccf_streamlines#22: `project_path_ordered_data` reads the 3-D 'volume lookup' dataset, which "
-    "does not exist in the current-generation surface paths file; remove this "
-    "marker when it is fixed"
-)
-
 
 @pytest.fixture
 def projector(mini_ccf):
@@ -310,18 +304,37 @@ def test_projecting_both_hemispheres_does_not_modify_the_callers_volume(mini_ccf
     assert np.array_equal(volume, before)
 
 
-@pytest.mark.xfail(strict=True, reason=MISSING_DATASET)
 def test_project_path_ordered_data(projector, mini_ccf):
-    """A documented public method that cannot run against current assets.
+    """Each streamline's datum lands on the view pixel that streamline drives.
 
-    It reads the 3-D ``volume lookup`` dataset, which the v3 surface-paths file
-    does not contain -- only the flattened form. The projector already holds
-    ``path_ordering``, which is the same information.
+    The method used to read the 3-D ``volume lookup`` dataset, which the v3
+    surface-paths file does not contain -- only the flattened form. It now uses
+    ``path_ordering``, which holds the same information.
     """
     data = np.arange(mini_ccf.paths.shape[0], dtype=float)
 
     result = projector.project_path_ordered_data(data)
 
-    row, col = mini_ccf.view_pixel_for_path(0)
     assert result.shape == mini_ccf.view_size
-    assert result[row, col] == 0.0
+    for path_index in mini_ccf.in_view_path_indices:
+        path_index = int(path_index)
+        for row, col in mini_ccf.view_pixels_for_path(path_index):
+            assert result[row, col] == float(path_index), path_index
+
+
+def test_project_path_ordered_data_indexes_data_by_path(projector, mini_ccf):
+    """The datum is picked out by streamline index, not by view order.
+
+    Projecting a one-hot vector must light up exactly the pixels that one
+    streamline drives, and nothing else.
+    """
+    path_index = int(mini_ccf.in_view_path_indices[0])
+    data = np.zeros(mini_ccf.paths.shape[0], dtype=float)
+    data[path_index] = 1.0
+
+    result = projector.project_path_ordered_data(data)
+
+    expected = mini_ccf.view_pixels_for_path(path_index)
+    assert result.sum() == pytest.approx(float(len(expected)))
+    for row, col in expected:
+        assert result[row, col] == 1.0

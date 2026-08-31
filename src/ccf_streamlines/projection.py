@@ -234,10 +234,12 @@ class Isocortex2dProjector:
         projection : array
             2D projection of data
         """
-        with h5py.File(self.surface_paths_file, "r") as path_f:
-            ordered_data = data[
-                path_f["volume lookup"][:].flat[self.view_lookup[:, 1]]
-            ]
+        # `path_ordering`, built at construction, is already the path index for
+        # each view entry -- the same thing as looking `view_lookup[:, 1]` up in
+        # the volume lookup, without reading the 1.2-billion-element dataset
+        # back in. The 3-D "volume lookup" form it used to read does not exist
+        # in the current-generation surface paths file at all.
+        ordered_data = data[self.path_ordering]
 
         projection = np.zeros(self.view_size, dtype=data.dtype)
         projection.flat[self.view_lookup[:, 0]] = ordered_data
