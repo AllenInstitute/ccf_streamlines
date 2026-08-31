@@ -13,23 +13,31 @@ network access, no database, no state outside the caller's arrays.
 ## Commands
 
     uv sync                       # install; requires-python >=3.9
-    uv run pytest                 # whole suite: 7 tests, ~3s (pyproject sets testpaths=tests, pythonpath=src)
+    uv run pytest                 # whole suite; seconds, no data files needed
+    CCF_STREAMLINES_TEST_DATA=... uv run pytest -m real_data   # opt-in tier, real assets
     cd docs && make html          # Sphinx docs -> docs/build (needs docs/requirements.txt: sphinx 5.2.3)
 
-There is no lint, format, or typecheck configuration in the repo, and no CI test job —
-`.github/workflows/python-publish.yml` is the only workflow and it only builds and
-publishes to PyPI on GitHub release. Merges are gated by nothing automated.
+There is no lint, format, or typecheck configuration in the repo.
+`.github/workflows/tests.yml` gates pull requests across x86-64 and ARM64 on Python
+3.9 and 3.13; the architecture dimension is load-bearing, since the tied-view-lookup
+defect exists only as a divergence between architectures. Coverage is reported, not
+gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
 
 ## Layout
 
 - `src/ccf_streamlines/` — the entire package; src-layout, built by `uv_build` (`pyproject.toml`).
-- `tests/` — pytest. Covers `coordinates.py` and `BoundaryFinder`; the projector
-  classes are untested because they need the multi-hundred-MB reference files.
+- `tests/` — pytest, no data files needed. Tests marked `xfail` are pinned to an open
+  bug or an open PR and assert the *correct* behaviour, so `xfail_strict` reports an
+  unexpected pass when one is fixed — that is the signal to delete the marker.
 - `docs/source/guide.rst` — the real user documentation: worked examples for each
   projector class, with expected output images. Read this before changing a public
   signature; it is the closest thing to an integration test.
-- `data_file_info.md` (repo root, not in the Sphinx build) — internal notes on the
-  reference data files, including the on-`/allen` paths and the shapes of each NRRD view.
+- `tests/mini_ccf.py` — builds a ~20 KB structurally faithful atlas into a temp
+  directory, so the projector classes are constructible without the multi-hundred-MB
+  assets. Also the format description: it is where to look for what the real HDF5
+  files contain, and every claim in it is asserted against them by
+  `tests/test_real_data.py`.
+- `docs/decisions/` — decision records. `0001` explains the fixture strategy.
 
 ## Key abstractions
 
@@ -60,9 +68,9 @@ publishes to PyPI on GitHub release. Merges are gated by nothing automated.
 
 1. `Isocortex2dProjector.__init__` reads `view lookup`, `view size`, `spacing` from the
    projection file, then `_load_and_sort_paths` reorders `paths` to match the view. That
-   reorder reads `volume lookup flat` in 1000-element chunks (`projection.py:102`) —
-   deliberately, to keep memory down (commit ef0cd04); the same chunking is repeated in
-   `IsocortexCoordinateProjector._path_lookup_chunked`.
+   reorder reads `volume lookup flat` in chunks — deliberately, to keep memory down
+   (commit ef0cd04). The size is the `chunk_size` constructor argument, default 1000;
+   the same chunking is repeated in `IsocortexCoordinateProjector._path_lookup_chunked`.
 2. `project_volume(volume, kind)` dispatches on `self.hemisphere`. For `"right"` and
    `"both"` it re-projects `np.flip(volume, axis=2)` and flips the result back.
 3. `_project_volume_to_view` does the actual reduction: `volume.flat[self.paths].max(axis=1)`

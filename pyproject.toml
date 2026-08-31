@@ -28,8 +28,13 @@ build-backend = "uv_build"
 [dependency-groups]
 dev = [
     "pytest>=7",
+    "pytest-cov>=4",
 ]
 
 [tool.pytest.ini_options]
-pythonpath = ["src"]
+pythonpath = ["src", "."]
 testpaths = ["tests"]
+# A test pinned to an open contribution asserts the *fixed* behaviour and is
+# marked xfail. If it starts passing, the fix has landed and the marker is
+# stale, so an unexpected pass must be reported rather than swallowed.
+xfail_strict = true

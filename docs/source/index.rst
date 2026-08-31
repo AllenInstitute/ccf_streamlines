@@ -12,6 +12,7 @@ Welcome to ccf_streamlines's documentation!
 
    guide
    data_files
+   glossary
    reference/index
 
 
