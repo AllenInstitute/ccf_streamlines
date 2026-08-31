@@ -5,20 +5,6 @@ import pytest
 
 from ccf_streamlines.projection import IsocortexEntireProjector
 
-MUTATES_INPUT = (
-    "AllenInstitute/ccf_streamlines#20: `project_volume` writes a sentinel into volume.flat[0] for max/min and "
-    "never restores it; remove this marker when it is fixed"
-)
-UNKNOWN_KIND_UNBOUND = (
-    "AllenInstitute/ccf_streamlines#21: an unrecognised `kind` falls through every branch and raises "
-    "UnboundLocalError on `values` rather than a clear error; remove this "
-    "marker when it is fixed"
-)
-UNKNOWN_SCALE_NONE = (
-    "AllenInstitute/ccf_streamlines#21: `top_of_streamline_coords` has no else branch, so an unrecognised `scale` "
-    "returns None instead of raising; remove this marker when it is fixed"
-)
-
 
 @pytest.fixture
 def projector(mini_ccf):
@@ -129,20 +115,17 @@ def test_a_volume_of_a_non_numeric_dtype_raises(projector, mini_ccf):
 # -- defects ---------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason=UNKNOWN_KIND_UNBOUND)
 def test_an_unrecognised_kind_raises_a_clear_error(projector, ramp_volume):
     with pytest.raises(ValueError):
         projector.project_volume(ramp_volume, kind="maximum")
 
 
-@pytest.mark.xfail(strict=True, reason=UNKNOWN_SCALE_NONE)
 def test_an_unrecognised_scale_raises(projector):
     """Currently returns None, so the caller gets a TypeError somewhere else."""
     with pytest.raises(ValueError):
         projector.top_of_streamline_coords(scale="mm")
 
 
-@pytest.mark.xfail(strict=True, reason=MUTATES_INPUT)
 @pytest.mark.parametrize("kind", ["max", "min"])
 def test_projection_does_not_modify_the_callers_volume(projector, mini_ccf, kind):
     volume = mini_ccf.volume()

@@ -10,16 +10,6 @@ import pytest
 
 from ccf_streamlines.projection import HEMISPHERE_SPACE_VIEW_LOOKUP, Isocortex2dProjector
 
-MUTATES_INPUT = (
-    "AllenInstitute/ccf_streamlines#20: `project_volume` writes a sentinel into volume.flat[0] for max/min and "
-    "never restores it, silently corrupting the caller's array; remove this "
-    "marker when it is fixed"
-)
-UNKNOWN_KIND_SILENT = (
-    "AllenInstitute/ccf_streamlines#21: `_project_volume_to_view` has no else branch, so an unrecognised `kind` "
-    "returns an all-zeros view instead of raising; remove this marker when it "
-    "is fixed"
-)
 MISSING_DATASET = (
     "AllenInstitute/ccf_streamlines#22: `project_path_ordered_data` reads the 3-D 'volume lookup' dataset, which "
     "does not exist in the current-generation surface paths file; remove this "
@@ -288,14 +278,12 @@ def test_integer_and_float_volumes_are_both_accepted(projector, mini_ccf, dtype)
 # -- defects ---------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason=UNKNOWN_KIND_SILENT)
 def test_an_unrecognised_kind_raises(projector, mini_ccf, ramp_volume):
     """A typo currently returns an array of zeros, which looks like real data."""
     with pytest.raises(ValueError):
         projector.project_volume(ramp_volume, kind="maximum")
 
 
-@pytest.mark.xfail(strict=True, reason=MUTATES_INPUT)
 @pytest.mark.parametrize("kind", ["max", "min"])
 def test_projection_does_not_modify_the_callers_volume(projector, mini_ccf, kind):
     """Callers must not have to defensively copy before projecting."""
@@ -308,7 +296,6 @@ def test_projection_does_not_modify_the_callers_volume(projector, mini_ccf, kind
     assert np.array_equal(volume, before)
 
 
-@pytest.mark.xfail(strict=True, reason=MUTATES_INPUT)
 def test_projecting_both_hemispheres_does_not_modify_the_callers_volume(mini_ccf):
     """The second pass writes through an ``np.flip`` view, so the far corner is
     clobbered as well as the first voxel."""
