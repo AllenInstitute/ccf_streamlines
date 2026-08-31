@@ -18,7 +18,7 @@ from ccf_streamlines.projection import (
 )
 
 DUPLICATED_CONSTANT = (
-    "the layer key list is duplicated across Isocortex3dProjector, "
+    "AllenInstitute/ccf_streamlines#26: the layer key list is duplicated across Isocortex3dProjector, "
     "IsocortexCoordinateProjector and metrics rather than shared; remove this "
     "marker when they refer to one definition"
 )

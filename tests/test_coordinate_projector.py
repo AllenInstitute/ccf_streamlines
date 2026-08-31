@@ -11,7 +11,7 @@ import pytest
 from ccf_streamlines.projection import IsocortexCoordinateProjector
 
 NO_PROJECTION_FILE = (
-    "constructing without `projection_file` and then calling "
+    "AllenInstitute/ccf_streamlines#24: constructing without `projection_file` and then calling "
     "`project_coordinates` raises AttributeError deep inside "
     "`_calculate_2d_coordinates` instead of a clear error at the call; remove "
     "this marker when it is fixed"
@@ -477,7 +477,7 @@ def test_projecting_without_a_projection_file_raises_a_clear_error(mini_ccf):
 
 
 MIRROR_OFF_BY_ONE = (
-    "`_get_collapsed_voxels_and_surface_voxels` reflects voxels with "
+    "AllenInstitute/ccf_streamlines#27: `_get_collapsed_voxels_and_surface_voxels` reflects voxels with "
     "`z_size - z` but coordinates with `z_size * resolution - u`, so for any "
     "point not on a voxel boundary the streamline is chosen one voxel away "
     "from where the depth is measured; remove this marker when they agree"

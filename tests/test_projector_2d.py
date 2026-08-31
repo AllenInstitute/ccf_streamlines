@@ -11,17 +11,17 @@ import pytest
 from ccf_streamlines.projection import HEMISPHERE_SPACE_VIEW_LOOKUP, Isocortex2dProjector
 
 MUTATES_INPUT = (
-    "`project_volume` writes a sentinel into volume.flat[0] for max/min and "
+    "AllenInstitute/ccf_streamlines#20: `project_volume` writes a sentinel into volume.flat[0] for max/min and "
     "never restores it, silently corrupting the caller's array; remove this "
     "marker when it is fixed"
 )
 UNKNOWN_KIND_SILENT = (
-    "`_project_volume_to_view` has no else branch, so an unrecognised `kind` "
+    "AllenInstitute/ccf_streamlines#21: `_project_volume_to_view` has no else branch, so an unrecognised `kind` "
     "returns an all-zeros view instead of raising; remove this marker when it "
     "is fixed"
 )
 MISSING_DATASET = (
-    "`project_path_ordered_data` reads the 3-D 'volume lookup' dataset, which "
+    "AllenInstitute/ccf_streamlines#22: `project_path_ordered_data` reads the 3-D 'volume lookup' dataset, which "
     "does not exist in the current-generation surface paths file; remove this "
     "marker when it is fixed"
 )

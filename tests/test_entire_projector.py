@@ -6,16 +6,16 @@ import pytest
 from ccf_streamlines.projection import IsocortexEntireProjector
 
 MUTATES_INPUT = (
-    "`project_volume` writes a sentinel into volume.flat[0] for max/min and "
+    "AllenInstitute/ccf_streamlines#20: `project_volume` writes a sentinel into volume.flat[0] for max/min and "
     "never restores it; remove this marker when it is fixed"
 )
 UNKNOWN_KIND_UNBOUND = (
-    "an unrecognised `kind` falls through every branch and raises "
+    "AllenInstitute/ccf_streamlines#21: an unrecognised `kind` falls through every branch and raises "
     "UnboundLocalError on `values` rather than a clear error; remove this "
     "marker when it is fixed"
 )
 UNKNOWN_SCALE_NONE = (
-    "`top_of_streamline_coords` has no else branch, so an unrecognised `scale` "
+    "AllenInstitute/ccf_streamlines#21: `top_of_streamline_coords` has no else branch, so an unrecognised `scale` "
     "returns None instead of raising; remove this marker when it is fixed"
 )
 

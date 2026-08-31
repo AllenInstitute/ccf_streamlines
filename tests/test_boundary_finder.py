@@ -15,7 +15,7 @@ import pytest
 from ccf_streamlines.projection import BoundaryFinder
 
 ABSENT_REGION_REFLECTION = (
-    "reflecting a region that is in the labels file but absent from the atlas "
+    "AllenInstitute/ccf_streamlines#25: reflecting a region that is in the labels file but absent from the atlas "
     "indexes the empty array it was given as if it were 2-D, raising "
     "IndexError; remove this marker when it is fixed"
 )
