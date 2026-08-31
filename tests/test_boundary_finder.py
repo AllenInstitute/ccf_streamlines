@@ -37,7 +37,13 @@ def test_labels_are_parsed_from_ragged_whitespace(finder, mini_ccf):
 
 def test_label_columns_are_named(finder):
     assert finder.labels_df.columns.tolist() == [
-        "r", "g", "b", "x0", "x1", "x2", "acronym"
+        "r",
+        "g",
+        "b",
+        "x0",
+        "x1",
+        "x2",
+        "acronym",
     ]
 
 
@@ -50,9 +56,7 @@ def test_the_atlas_is_loaded_with_its_metadata(finder, mini_ccf):
 # -- region_boundaries -----------------------------------------------------
 
 
-def test_boundaries_are_found_for_every_region_present_in_the_atlas(
-    finder, mini_ccf
-):
+def test_boundaries_are_found_for_every_region_present_in_the_atlas(finder, mini_ccf):
     boundaries = finder.region_boundaries()
     # CCC has no pixels, so it is not among the regions inferred from the atlas.
     assert set(boundaries) == set(mini_ccf.atlas_regions)
@@ -86,9 +90,7 @@ def test_the_two_regions_have_different_boundaries(finder, mini_ccf):
     assert aaa[:, 0].max() < bbb[:, 0].min()
 
 
-def test_a_region_absent_from_the_atlas_gives_an_empty_boundary(
-    finder, mini_ccf
-):
+def test_a_region_absent_from_the_atlas_gives_an_empty_boundary(finder, mini_ccf):
     """Documented: regions specified but not present return empty lists."""
     boundaries = finder.region_boundaries(
         region_acronyms=[mini_ccf.absent_region_acronym]
@@ -134,7 +136,7 @@ def test_masks_with_default_arguments_are_the_full_view(finder, mini_ccf):
     masks = finder.region_masks()
 
     assert set(masks) == set(mini_ccf.atlas_regions)
-    for acronym, mask in masks.items():
+    for mask in masks.values():
         assert mask.shape == mini_ccf.atlas.shape
         assert mask.any()
 
@@ -225,9 +227,7 @@ def test_reflecting_a_region_absent_from_the_atlas_degrades_predictably(
     assert boundaries[mini_ccf.absent_region_acronym].size == 0
 
 
-def test_a_present_and_an_absent_region_can_be_requested_together(
-    finder, mini_ccf
-):
+def test_a_present_and_an_absent_region_can_be_requested_together(finder, mini_ccf):
     """The realistic form of the defect: one missing region in a list of many
     takes the whole call down."""
     boundaries = finder.region_boundaries(

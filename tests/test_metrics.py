@@ -61,7 +61,9 @@ def test_thicknesses_follow_the_number_of_voxels_in_each_layer():
     """Layer 2/3 given three voxels must come back three times as thick."""
     layers = [
         LAYER_IDS[0],
-        LAYER_IDS[1], LAYER_IDS[1], LAYER_IDS[1],
+        LAYER_IDS[1],
+        LAYER_IDS[1],
+        LAYER_IDS[1],
         LAYER_IDS[2],
         LAYER_IDS[3],
         LAYER_IDS[4],
@@ -69,7 +71,9 @@ def test_thicknesses_follow_the_number_of_voxels_in_each_layer():
     ]
     row, volume = _straight_path(1, 1, layers, padded_length=10)
 
-    result = measure_streamline_layer_thicknesses(volume, row.reshape(1, -1), RESOLUTION)
+    result = measure_streamline_layer_thicknesses(
+        volume, row.reshape(1, -1), RESOLUTION
+    )
 
     assert result["Isocortex layer 1"][0][2] == pytest.approx(10.0)
     assert result["Isocortex layer 2/3"][0][2] == pytest.approx(30.0)
@@ -83,7 +87,9 @@ def test_an_absent_layer_reports_all_zeros():
     layers = [i for i in LAYER_IDS if i != LAYER_IDS[2]]  # no layer 4
     row, volume = _straight_path(1, 1, layers)
 
-    result = measure_streamline_layer_thicknesses(volume, row.reshape(1, -1), RESOLUTION)
+    result = measure_streamline_layer_thicknesses(
+        volume, row.reshape(1, -1), RESOLUTION
+    )
 
     assert np.array_equal(result["Isocortex layer 4"][0], np.zeros(3))
     # ...and the layers around it stay contiguous
@@ -93,7 +99,9 @@ def test_an_absent_layer_reports_all_zeros():
 
 def test_total_thickness_equals_the_number_of_annotated_voxels():
     row, volume = _straight_path(1, 1, LAYER_IDS)
-    result = measure_streamline_layer_thicknesses(volume, row.reshape(1, -1), RESOLUTION)
+    result = measure_streamline_layer_thicknesses(
+        volume, row.reshape(1, -1), RESOLUTION
+    )
 
     total = sum(result[name][0][2] for name in LAYER_NAMES)
     assert total == pytest.approx(60.0)
@@ -101,8 +109,15 @@ def test_total_thickness_equals_the_number_of_annotated_voxels():
 
 def test_several_streamlines_are_measured_independently():
     layers_a = LAYER_IDS
-    layers_b = [LAYER_IDS[0], LAYER_IDS[0], LAYER_IDS[1], LAYER_IDS[2],
-                LAYER_IDS[3], LAYER_IDS[4], LAYER_IDS[5]]
+    layers_b = [
+        LAYER_IDS[0],
+        LAYER_IDS[0],
+        LAYER_IDS[1],
+        LAYER_IDS[2],
+        LAYER_IDS[3],
+        LAYER_IDS[4],
+        LAYER_IDS[5],
+    ]
     row_a, volume = _straight_path(1, 1, layers_a, padded_length=10)
     row_b, volume_b = _straight_path(2, 2, layers_b, padded_length=10)
     volume = volume + volume_b
@@ -135,8 +150,12 @@ def test_duplicate_consecutive_voxels_are_collapsed_before_measuring():
 def test_resolution_scales_the_measured_thicknesses():
     row, volume = _straight_path(1, 1, LAYER_IDS)
 
-    at_10 = measure_streamline_layer_thicknesses(volume, row.reshape(1, -1), (10, 10, 10))
-    at_20 = measure_streamline_layer_thicknesses(volume, row.reshape(1, -1), (20, 20, 20))
+    at_10 = measure_streamline_layer_thicknesses(
+        volume, row.reshape(1, -1), (10, 10, 10)
+    )
+    at_20 = measure_streamline_layer_thicknesses(
+        volume, row.reshape(1, -1), (20, 20, 20)
+    )
 
     for name in LAYER_NAMES:
         assert at_20[name][0][2] == pytest.approx(2 * at_10[name][0][2])

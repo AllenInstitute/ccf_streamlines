@@ -2,7 +2,7 @@ import numpy as np
 
 
 def coordinates_to_voxels(coords, resolution=(10, 10, 10)):
-    """ Find the voxel coordinates of spatial coordinates
+    """Find the voxel coordinates of spatial coordinates
 
     Parameters
     ----------
@@ -20,10 +20,13 @@ def coordinates_to_voxels(coords, resolution=(10, 10, 10)):
     if len(resolution) != coords.shape[1]:
         raise ValueError(
             f"second dimension of `coords` must match length of `resolution`; "
-            f"{len(resolution)} != {coords.shape[1]}")
+            f"{len(resolution)} != {coords.shape[1]}"
+        )
 
     if not np.issubdtype(coords.dtype, np.number):
-        raise ValueError(f"coords must have a numeric dtype (dtype is '{coords.dtype}')")
+        raise ValueError(
+            f"coords must have a numeric dtype (dtype is '{coords.dtype}')"
+        )
 
     voxels = np.floor(coords / resolution).astype(int)
     return voxels

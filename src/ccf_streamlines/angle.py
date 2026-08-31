@@ -1,15 +1,21 @@
-import h5py
-import numpy as np
-from ccf_streamlines.coordinates import coordinates_to_voxels
-from ccf_streamlines.projection import _matching_voxel_indices
-from scipy.spatial.distance import euclidean
 import logging
 
+import h5py
+import numpy as np
+from scipy.spatial.distance import euclidean
+
+from ccf_streamlines.coordinates import coordinates_to_voxels
+from ccf_streamlines.projection import _matching_voxel_indices
+
+
 def vector_to_3d_affine_matrix(vec):
-    M = np.array([[vec[0], vec[1], vec[2], vec[9]],
-              [vec[3], vec[4], vec[5], vec[10]],
-              [vec[6], vec[7], vec[8], vec[11]],
-             ])
+    M = np.array(
+        [
+            [vec[0], vec[1], vec[2], vec[9]],
+            [vec[3], vec[4], vec[5], vec[10]],
+            [vec[6], vec[7], vec[8], vec[11]],
+        ]
+    )
     return M
 
 
@@ -19,8 +25,8 @@ def find_closest_streamline(
     surface_paths,
     resolution=(10, 10, 10),
     volume_shape=(1320, 800, 1140),
-    ):
-    """ Find the nearest streamline of a CCF coordinate.
+):
+    """Find the nearest streamline of a CCF coordinate.
 
     If voxel is not in the reference file, returns None.
 
@@ -77,43 +83,41 @@ def find_closest_streamline(
         voxel[2] = z_size - 1 - voxel[2]
         flip_hemisphere = True
 
-    voxel_ind = np.ravel_multi_index(
-            tuple(voxel),
-            volume_shape
-        )
+    voxel_ind = np.ravel_multi_index(tuple(voxel), volume_shape)
     matching_surface_voxel_ind = _matching_voxel_indices(
-        np.array([voxel_ind]),
-        closest_surface_voxels)[0]
+        np.array([voxel_ind]), closest_surface_voxels
+    )[0]
 
     if matching_surface_voxel_ind == 0:
         # the voxel is not within the isocortex and therefore has no defined
         # closest streamline
-        logging.warning("Requested voxel is not within isocortex and has no defined closest streamline")
+        logging.warning(
+            "Requested voxel is not within isocortex and has no defined closest streamline"
+        )
         return np.array([])
 
     # Pull path from surface paths file
     if isinstance(surface_paths, str):
         with h5py.File(surface_paths, "r") as f:
-            path_dset = f['paths']
-            volume_lookup_dset = f['volume lookup flat']
+            path_dset = f["paths"]
+            volume_lookup_dset = f["volume lookup flat"]
             path_ind = volume_lookup_dset[matching_surface_voxel_ind]
-            if path_ind == -1: # -1 is defined as not existing
+            if path_ind == -1:  # -1 is defined as not existing
                 logging.error("Voxel has no defined streamline")
 
             path = path_dset[path_ind, :]
     else:
-        path_dset = surface_paths['paths']
-        volume_lookup_dset = surface_paths['volume lookup flat']
+        path_dset = surface_paths["paths"]
+        volume_lookup_dset = surface_paths["volume lookup flat"]
         path_ind = volume_lookup_dset[matching_surface_voxel_ind]
-        if path_ind == -1: # -1 is defined as not existing
+        if path_ind == -1:  # -1 is defined as not existing
             logging.error("Voxel has no defined streamline")
         path = path_dset[path_ind, :]
 
     path = path[path > 0]
 
     # Convert path to coordinates in microns
-    streamline_coords = np.unravel_index(
-        path, volume_shape)
+    streamline_coords = np.unravel_index(path, volume_shape)
     streamline_coords = np.array(streamline_coords).T
     if flip_hemisphere:
         # Put streamline on same hemisphere as original voxel, undoing the
@@ -125,9 +129,7 @@ def find_closest_streamline(
     return streamline_coords
 
 
-def determine_angle_between_streamline_and_plane(
-    streamline_coords,
-    plane_transform):
+def determine_angle_between_streamline_and_plane(streamline_coords, plane_transform):
     """
     Find angle between the surface of a given plane and a streamline.
 
@@ -154,11 +156,14 @@ def determine_angle_between_streamline_and_plane(
 
     streamline_wm = streamline_coords[-1, :]
     streamline_pia = streamline_coords[0, :]
-    streamline_unit = (streamline_pia - streamline_wm) / euclidean(streamline_pia, streamline_wm)
+    streamline_unit = (streamline_pia - streamline_wm) / euclidean(
+        streamline_pia, streamline_wm
+    )
 
     angle_with_norm = np.arctan2(
         np.linalg.norm(np.cross(norm_unit, streamline_unit)),
-        np.dot(norm_unit, streamline_unit))
+        np.dot(norm_unit, streamline_unit),
+    )
 
     # Take complement and convert from radians to degrees
-    return 90. - (angle_with_norm * 180. / np.pi)
+    return 90.0 - (angle_with_norm * 180.0 / np.pi)

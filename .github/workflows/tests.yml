@@ -67,3 +67,28 @@ jobs:
         run: >
           uv run --python ${{ matrix.python-version }}
           pytest --cov=ccf_streamlines --cov-report=term-missing -ra
+
+  lint:
+    name: ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Single architecture and a single interpreter: ruff's findings are a
+      # property of the source, not of the machine it runs on, so the matrix
+      # the test job needs would buy nothing here.
+      # `--only-group dev` resolves ruff at its locked version without
+      # installing numpy, scipy, scikit-image or the package itself: none of
+      # them affect what ruff reports, and skipping them keeps this job quick.
+      - name: Lint
+        run: uv run --only-group dev ruff check --output-format=github .
+
+      # Reported separately from the lint pass so a formatting-only failure is
+      # distinguishable at a glance from a real lint finding.
+      - name: Check formatting
+        run: uv run --only-group dev ruff format --check --diff .

@@ -38,12 +38,18 @@ def test_rotate_axes_swaps_the_first_and_last_axes(small_volume):
     """Volumes from the ISH atlas API have anterior-posterior in z and
     left-right in x; the CCF has those swapped."""
     rotated = upscale_ish_volume(
-        small_volume, orig_voxel_size=10, target_voxel_size=10,
-        target_volume_shape=(2, 1, 3), rotate_axes=True,
+        small_volume,
+        orig_voxel_size=10,
+        target_voxel_size=10,
+        target_volume_shape=(2, 1, 3),
+        rotate_axes=True,
     )
     unrotated = upscale_ish_volume(
-        np.swapaxes(small_volume, 0, 2), orig_voxel_size=10, target_voxel_size=10,
-        target_volume_shape=(2, 1, 3), rotate_axes=False,
+        np.swapaxes(small_volume, 0, 2),
+        orig_voxel_size=10,
+        target_voxel_size=10,
+        target_volume_shape=(2, 1, 3),
+        rotate_axes=False,
     )
     assert np.array_equal(rotated, unrotated)
 
@@ -51,8 +57,11 @@ def test_rotate_axes_swaps_the_first_and_last_axes(small_volume):
 def test_without_rotation_a_matching_shape_round_trips(small_volume):
     """A 1:1 ratio and a matching target shape is the identity."""
     result = upscale_ish_volume(
-        small_volume, orig_voxel_size=10, target_voxel_size=10,
-        target_volume_shape=small_volume.shape, rotate_axes=False,
+        small_volume,
+        orig_voxel_size=10,
+        target_voxel_size=10,
+        target_volume_shape=small_volume.shape,
+        rotate_axes=False,
     )
     assert np.array_equal(result, small_volume)
 
@@ -61,8 +70,11 @@ def test_upscaling_repeats_each_source_voxel_ratio_times():
     """A single source voxel fills a ratio-cubed block of the target."""
     volume = np.array([[[7.0]]])
     result = upscale_ish_volume(
-        volume, orig_voxel_size=30, target_voxel_size=10,
-        target_volume_shape=(3, 3, 3), rotate_axes=False,
+        volume,
+        orig_voxel_size=30,
+        target_voxel_size=10,
+        target_volume_shape=(3, 3, 3),
+        rotate_axes=False,
     )
     assert np.array_equal(result, np.full((3, 3, 3), 7.0))
 
@@ -72,6 +84,8 @@ def test_target_larger_than_the_scaled_source_raises(small_volume):
     out-of-bounds index, not a silent zero-fill."""
     with pytest.raises(IndexError):
         upscale_ish_volume(
-            small_volume, orig_voxel_size=20, target_voxel_size=10,
+            small_volume,
+            orig_voxel_size=20,
+            target_voxel_size=10,
             target_volume_shape=(100, 2, 6),
         )

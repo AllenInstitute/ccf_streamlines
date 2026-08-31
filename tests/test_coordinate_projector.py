@@ -76,7 +76,7 @@ def _mirrored_voxel(mini_ccf, voxel):
 #: Queries are made with drop-outside on, which sidesteps the empty-search
 #: crash pinned in tests/test_pinned_contributions.py. Once #13 lands this can
 #: be dropped.
-DROP = dict(drop_voxels_outside_view_streamlines=True)
+DROP = {"drop_voxels_outside_view_streamlines": True}
 
 
 # -- depths ----------------------------------------------------------------
@@ -246,7 +246,9 @@ def test_a_coordinate_outside_cortex_projects_to_nan(projector, mini_ccf):
     """Unmappable points come back as a documented sentinel, not a wrong number."""
     outside = (np.array([3, 0, 1]) * np.array(mini_ccf.resolution)).astype(float)
 
-    result = projector.project_coordinates(outside.reshape(1, 3), hemisphere="left", **DROP)
+    result = projector.project_coordinates(
+        outside.reshape(1, 3), hemisphere="left", **DROP
+    )
 
     assert np.isnan(result[0, 0])
     assert np.isnan(result[0, 1])
@@ -505,12 +507,16 @@ def test_mirror_image_points_have_the_same_depth(projector, mini_ccf, frac):
     x, y, _ = mini_ccf.path_voxels(0)[3]
     lateral = sorted({int(v) for v in mini_ccf.path_starts[:, 2]})
 
-    left = np.array([
-        [(x + frac) * mini_ccf.resolution[0],
-         (y + frac) * mini_ccf.resolution[1],
-         (z + frac) * res_z]
-        for z in lateral
-    ])
+    left = np.array(
+        [
+            [
+                (x + frac) * mini_ccf.resolution[0],
+                (y + frac) * mini_ccf.resolution[1],
+                (z + frac) * res_z,
+            ]
+            for z in lateral
+        ]
+    )
     right = left.copy()
     right[:, 2] = z_size * res_z - left[:, 2]
 

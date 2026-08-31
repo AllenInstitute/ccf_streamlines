@@ -29,6 +29,7 @@ build-backend = "uv_build"
 dev = [
     "pytest>=7",
     "pytest-cov>=4",
+    "ruff>=0.14",
 ]
 
 [tool.pytest.ini_options]
@@ -38,3 +39,23 @@ testpaths = ["tests"]
 # marked xfail. If it starts passing, the fix has landed and the marker is
 # stale, so an unexpected pass must be reported rather than swallowed.
 xfail_strict = true
+
+[tool.ruff]
+# The package supports 3.9, so the linter must not suggest syntax newer than that
+# even when it is run under a newer interpreter.
+target-version = "py39"
+
+[tool.ruff.lint]
+# E/W/F are the pycodestyle + pyflakes baseline; I keeps import blocks sorted;
+# UP is bounded by target-version above; B and C4 catch the two classes of bug
+# this codebase can actually hit -- loop-variable and mutable-default mistakes,
+# and needless intermediate collections in array code.
+select = ["E", "W", "F", "I", "UP", "B", "C4"]
+# Line length is the formatter's job. It cannot split a long comment or a
+# docstring line, so leaving E501 on would flag exactly the lines `ruff format`
+# is unable to fix.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# The re-export of __version__ is the module's entire purpose.
+"src/ccf_streamlines/__init__.py" = ["F401"]

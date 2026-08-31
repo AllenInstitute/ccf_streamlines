@@ -20,12 +20,14 @@ from ccf_streamlines.projection import _matching_voxel_indices
 @pytest.fixture
 def lookup():
     """Key column sorted and unique; value column deliberately unsorted."""
-    return np.array([
-        [10, 700],
-        [20, 500],
-        [30, 900],
-        [40, 100],
-    ])
+    return np.array(
+        [
+            [10, 700],
+            [20, 500],
+            [30, 900],
+            [40, 100],
+        ]
+    )
 
 
 def test_every_query_returns_its_matching_row(lookup):
@@ -67,7 +69,11 @@ def test_an_empty_query_returns_an_empty_result(lookup):
 def test_columns_can_be_swapped(lookup):
     """The 2-D coordinate path searches column 1 and returns column 0."""
     result = _matching_voxel_indices(
-        np.array([900, 100]), lookup, lookup_ind=1, ref_ind=0, missing_value=-1,
+        np.array([900, 100]),
+        lookup,
+        lookup_ind=1,
+        ref_ind=0,
+        missing_value=-1,
         sorter=np.argsort(lookup[:, 1]),
     )
     assert np.array_equal(result, np.array([30, 40]))
@@ -75,17 +81,23 @@ def test_columns_can_be_swapped(lookup):
 
 def test_a_sorter_makes_an_unsorted_key_column_searchable():
     """The view-lookup files are not sorted on their volume-index column."""
-    unsorted = np.array([
-        [1, 300],
-        [2, 100],
-        [3, 400],
-        [4, 200],
-    ])
+    unsorted = np.array(
+        [
+            [1, 300],
+            [2, 100],
+            [3, 400],
+            [4, 200],
+        ]
+    )
     sorter = np.argsort(unsorted[:, 1])
 
     result = _matching_voxel_indices(
-        np.array([100, 400]), unsorted, lookup_ind=1, ref_ind=0,
-        missing_value=-1, sorter=sorter,
+        np.array([100, 400]),
+        unsorted,
+        lookup_ind=1,
+        ref_ind=0,
+        missing_value=-1,
+        sorter=sorter,
     )
     assert np.array_equal(result, np.array([2, 3]))
 
@@ -97,12 +109,14 @@ def test_without_a_sorter_an_unsorted_lookup_raises():
     out-of-order reference file produced wrong matches rather than an error.
     The same query is fine once a ``sorter`` supplies the ordering.
     """
-    unsorted = np.array([
-        [1, 300],
-        [2, 100],
-        [3, 400],
-        [4, 200],
-    ])
+    unsorted = np.array(
+        [
+            [1, 300],
+            [2, 100],
+            [3, 400],
+            [4, 200],
+        ]
+    )
 
     with pytest.raises(ValueError, match="must increase monotonically"):
         _matching_voxel_indices(
@@ -110,7 +124,11 @@ def test_without_a_sorter_an_unsorted_lookup_raises():
         )
 
     with_sorter = _matching_voxel_indices(
-        np.array([100]), unsorted, lookup_ind=1, ref_ind=0, missing_value=-1,
+        np.array([100]),
+        unsorted,
+        lookup_ind=1,
+        ref_ind=0,
+        missing_value=-1,
         sorter=np.argsort(unsorted[:, 1]),
     )
     assert with_sorter[0] == 2
@@ -133,11 +151,11 @@ def test_a_sorter_that_does_not_sort_raises():
     lookup = np.column_stack([np.array([30, 10, 20]), np.arange(3)])
 
     with pytest.raises(ValueError, match="in `sorter` order"):
-        _matching_voxel_indices(
-            np.array([10]), lookup, sorter=np.arange(3))
+        _matching_voxel_indices(np.array([10]), lookup, sorter=np.arange(3))
 
     ok = _matching_voxel_indices(
-        np.array([10]), lookup, sorter=np.argsort(lookup[:, 0]))
+        np.array([10]), lookup, sorter=np.argsort(lookup[:, 0])
+    )
     assert ok[0] == 1
 
 
@@ -149,7 +167,9 @@ def test_equal_neighbouring_keys_are_ordered(lookup):
 
 def test_a_single_row_lookup_is_ordered():
     single = np.array([[7, 70]])
-    assert _matching_voxel_indices(np.array([7, 8]), single, missing_value=-1).tolist() == [70, -1]
+    assert _matching_voxel_indices(
+        np.array([7, 8]), single, missing_value=-1
+    ).tolist() == [70, -1]
 
 
 def test_the_ordering_check_is_remembered_per_array():
@@ -181,18 +201,28 @@ def test_a_tie_resolves_to_the_first_row_in_sorter_order():
     whichever tied row the ordering placed first. The helper is not wrong; the
     caller choosing an unstable ordering is.
     """
-    tied = np.array([
-        [7, 100],
-        [8, 100],
-        [9, 200],
-    ])
+    tied = np.array(
+        [
+            [7, 100],
+            [8, 100],
+            [9, 200],
+        ]
+    )
 
     stable = _matching_voxel_indices(
-        np.array([100]), tied, lookup_ind=1, ref_ind=0, missing_value=-1,
+        np.array([100]),
+        tied,
+        lookup_ind=1,
+        ref_ind=0,
+        missing_value=-1,
         sorter=np.argsort(tied[:, 1], kind="stable"),
     )
     reversed_ties = _matching_voxel_indices(
-        np.array([100]), tied, lookup_ind=1, ref_ind=0, missing_value=-1,
+        np.array([100]),
+        tied,
+        lookup_ind=1,
+        ref_ind=0,
+        missing_value=-1,
         sorter=np.lexsort((-np.arange(len(tied)), tied[:, 1])),
     )
 
@@ -217,13 +247,15 @@ def test_a_query_past_the_last_key_is_missing(lookup):
     "is it present?" answer has to come from somewhere other than an index.
     """
     result = _matching_voxel_indices(
-        np.array([40, 41, 10_000]), lookup, missing_value=-1)
+        np.array([40, 41, 10_000]), lookup, missing_value=-1
+    )
     assert np.array_equal(result, np.array([100, -1, -1]))
 
 
 def test_an_empty_lookup_returns_all_missing():
     result = _matching_voxel_indices(
-        np.array([1, 2, 3]), np.zeros((0, 2), dtype=int), missing_value=-1)
+        np.array([1, 2, 3]), np.zeros((0, 2), dtype=int), missing_value=-1
+    )
     assert np.array_equal(result, np.array([-1, -1, -1]))
 
 
@@ -240,14 +272,17 @@ def test_the_key_column_is_never_scanned_end_to_end(lookup, monkeypatch, with_so
     timing assertion would say the same thing far less reliably. Membership now
     comes from the ``np.searchsorted`` the helper already performs.
     """
+
     def forbidden(*args, **kwargs):
         raise AssertionError(
-            "membership must come from the binary search, not a full-column scan")
+            "membership must come from the binary search, not a full-column scan"
+        )
 
     monkeypatch.setattr(np, "isin", forbidden)
     monkeypatch.setattr(np, "in1d", forbidden, raising=False)  # gone in numpy 2
 
     sorter = np.argsort(lookup[:, 0], kind="stable") if with_sorter else None
     result = _matching_voxel_indices(
-        np.array([10, 15, 40]), lookup, sorter=sorter, missing_value=-1)
+        np.array([10, 15, 40]), lookup, sorter=sorter, missing_value=-1
+    )
     assert np.array_equal(result, np.array([700, -1, 100]))

@@ -1,7 +1,8 @@
 import numpy as np
 
+
 def remove_duplicate_voxels_from_paths(paths):
-    """ Remove duplicate consecutive voxels from the paths
+    """Remove duplicate consecutive voxels from the paths
 
     Duplicate consecutive voxels are identified and removed - the list of
     voxels is then shifted to fill in the gaps left by the duplicates, so the
@@ -33,8 +34,7 @@ def remove_duplicate_voxels_from_paths(paths):
     # into 2D array
     insert_locs = np.cumsum(nonzero_per_row)
     paths = np.insert(
-        paths[np.nonzero(paths_diff)],
-        np.repeat(insert_locs, zeros_at_end),
-        0).reshape(n_paths, -1)
+        paths[np.nonzero(paths_diff)], np.repeat(insert_locs, zeros_at_end), 0
+    ).reshape(n_paths, -1)
 
     return paths

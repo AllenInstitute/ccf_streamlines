@@ -1,16 +1,16 @@
-import nrrd
-import h5py
 import logging
-import itertools
 import weakref
+
+import h5py
+import nrrd
 import numpy as np
 import pandas as pd
-from ccf_streamlines.coordinates import coordinates_to_voxels
+from scipy.spatial.distance import cdist
 from skimage.measure import find_contours
 from tqdm import tqdm
-from scipy.spatial.distance import cdist
-from ccf_streamlines.linestring3d import LineString3D
 
+from ccf_streamlines.coordinates import coordinates_to_voxels
+from ccf_streamlines.linestring3d import LineString3D
 
 HEMISPHERE_SPACE_VIEW_LOOKUP = {
     "flatmap_butterfly": 184,
@@ -27,17 +27,17 @@ HEMISPHERE_SPACE_VIEW_LOOKUP = {
 #: one, and the projector classes below, which read one back, must agree on
 #: them exactly. They share this list rather than repeating it.
 ISOCORTEX_LAYER_KEYS = [
-    'Isocortex layer 1',
-    'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
-    'Isocortex layer 4',
-    'Isocortex layer 5',
-    'Isocortex layer 6a',
-    'Isocortex layer 6b'
+    "Isocortex layer 1",
+    "Isocortex layer 2/3",  # hilariously, this goes into a group in the h5 file
+    "Isocortex layer 4",
+    "Isocortex layer 5",
+    "Isocortex layer 6a",
+    "Isocortex layer 6b",
 ]
 
 
 class Isocortex2dProjector:
-    """ 2D projection of common cortical framework volumes
+    """2D projection of common cortical framework volumes
 
     Parameters
     ----------
@@ -65,7 +65,8 @@ class Isocortex2dProjector:
         the default is suitable for the full-size reference files.
     """
 
-    def __init__(self,
+    def __init__(
+        self,
         projection_file,
         surface_paths_file,
         hemisphere="both",
@@ -73,7 +74,9 @@ class Isocortex2dProjector:
         chunk_size=1000,
     ):
         if hemisphere not in {"both", "left", "right"}:
-            raise ValueError(f"Value of `hemisphere` ({hemisphere}) is not allowed; must be `both`, `left`, or `right`.")
+            raise ValueError(
+                f"Value of `hemisphere` ({hemisphere}) is not allowed; must be `both`, `left`, or `right`."
+            )
 
         self.hemisphere = hemisphere
         self.chunk_size = chunk_size
@@ -91,9 +94,13 @@ class Isocortex2dProjector:
                 self.view_space_for_other_hemisphere = self.view_size[0] // 2
             elif isinstance(view_space_for_other_hemisphere, str):
                 if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
-                    self.view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
+                    self.view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[
+                        view_space_for_other_hemisphere
+                    ]
                 else:
-                    raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
+                    raise ValueError(
+                        f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option"
+                    )
             else:
                 self.view_space_for_other_hemisphere = view_space_for_other_hemisphere
         else:
@@ -127,9 +134,11 @@ class Isocortex2dProjector:
             print("loading path information")
             for i in tqdm(range(0, sorted_lookup.shape[0], chunk_size)):
                 # track duplicate info
-                vals, counts = np.unique(sorted_lookup[i:i + chunk_size], return_counts=True)
+                vals, counts = np.unique(
+                    sorted_lookup[i : i + chunk_size], return_counts=True
+                )
                 arr = volume_lookup_dset[vals]
-                path_ind[i:i + chunk_size] = np.repeat(arr, counts)
+                path_ind[i : i + chunk_size] = np.repeat(arr, counts)
 
         # return to intended order
         path_ind = path_ind[view_unsorter]
@@ -138,7 +147,7 @@ class Isocortex2dProjector:
         return paths, path_ind
 
     def project_volume(self, volume, kind="max"):
-        """ Create a maximum projection view of the volume
+        """Create a maximum projection view of the volume
 
         Parameters
         ----------
@@ -156,24 +165,30 @@ class Isocortex2dProjector:
 
         if kind not in {"max", "min", "mean", "average", "sum"}:
             raise ValueError(
-                f"`kind` must be 'max', 'min', 'mean', 'average', or 'sum'; was {kind}")
+                f"`kind` must be 'max', 'min', 'mean', 'average', or 'sum'; was {kind}"
+            )
 
         if self.hemisphere == "left":
             projected_volume = self._project_volume_to_view(volume, kind)
             if self.view_space_for_other_hemisphere > 0:
-                projected_volume = projected_volume[:-self.view_space_for_other_hemisphere, :]
+                projected_volume = projected_volume[
+                    : -self.view_space_for_other_hemisphere, :
+                ]
         elif self.hemisphere == "right":
             projected_volume = self._project_volume_to_view(
-                np.flip(volume, axis=2), kind)
+                np.flip(volume, axis=2), kind
+            )
             if self.view_space_for_other_hemisphere > 0:
-                projected_volume = projected_volume[:-self.view_space_for_other_hemisphere, :]
+                projected_volume = projected_volume[
+                    : -self.view_space_for_other_hemisphere, :
+                ]
             projected_volume = np.flip(projected_volume, axis=0)
         elif self.hemisphere == "both":
             left = self._project_volume_to_view(volume, kind)
             right = self._project_volume_to_view(np.flip(volume, axis=2), kind)
             if self.view_space_for_other_hemisphere > 0:
-                left = left[:-self.view_space_for_other_hemisphere, :]
-                right = right[:-self.view_space_for_other_hemisphere, :]
+                left = left[: -self.view_space_for_other_hemisphere, :]
+                right = right[: -self.view_space_for_other_hemisphere, :]
             right = np.flip(right, axis=0)
             projected_volume = np.concatenate([left, right], axis=0)
         else:
@@ -184,7 +199,8 @@ class Isocortex2dProjector:
     def _project_volume_to_view(self, volume, kind="max"):
         if volume.shape != self.volume_shape:
             raise ValueError(
-                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}")
+                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}"
+            )
 
         projected_volume = np.zeros(self.view_size, dtype=volume.dtype)
 
@@ -213,17 +229,17 @@ class Isocortex2dProjector:
             projected_volume.flat[self.view_lookup[:, 0]] = values.min(axis=1)
         elif kind == "mean" or kind == "average":
             projected_volume.flat[self.view_lookup[:, 0]] = np.nanmean(
-                np.where(self.paths > 0, volume.flat[self.paths], np.nan),
-                axis=1)
+                np.where(self.paths > 0, volume.flat[self.paths], np.nan), axis=1
+            )
         elif kind == "sum":
             projected_volume.flat[self.view_lookup[:, 0]] = np.nansum(
-                np.where(self.paths > 0, volume.flat[self.paths], np.nan),
-                axis=1)
+                np.where(self.paths > 0, volume.flat[self.paths], np.nan), axis=1
+            )
 
         return projected_volume
 
     def project_path_ordered_data(self, data):
-        """ Project 1D data corresponding to the list of streamlines
+        """Project 1D data corresponding to the list of streamlines
 
         Parameters
         ----------
@@ -249,7 +265,7 @@ class Isocortex2dProjector:
 
 
 class Isocortex3dProjector(Isocortex2dProjector):
-    """ Flattened projection of the common cortical framework with thickness
+    """Flattened projection of the common cortical framework with thickness
 
     Parameters
     ----------
@@ -289,11 +305,13 @@ class Isocortex3dProjector(Isocortex2dProjector):
         Number of entries read from the volume lookup at a time while ordering
         the paths to match the view.
     """
+
     #: The module-level list, kept as a class attribute for callers that
     #: reach for it there.
     ISOCORTEX_LAYER_KEYS = ISOCORTEX_LAYER_KEYS
 
-    def __init__(self,
+    def __init__(
+        self,
         projection_file,
         surface_paths_file,
         thickness_type="unnormalized",
@@ -311,18 +329,28 @@ class Isocortex3dProjector(Isocortex2dProjector):
             chunk_size,
         )
 
-        allowed_thickness_types = {"unnormalized", "normalized_full", "normalized_layers"}
+        allowed_thickness_types = {
+            "unnormalized",
+            "normalized_full",
+            "normalized_layers",
+        }
         if thickness_type not in allowed_thickness_types:
-            raise ValueError(f"{thickness_type} not in allowed values {allowed_thickness_types}")
+            raise ValueError(
+                f"{thickness_type} not in allowed values {allowed_thickness_types}"
+            )
         self.thickness_type = thickness_type
 
         self.layer_thicknesses = layer_thicknesses
 
         if thickness_type == "normalized_layers":
             if streamline_layer_thickness_file is None:
-                raise ValueError("`streamline_layer_thickness_file` cannot be None if `thickness_type` is `normalized_layers`")
+                raise ValueError(
+                    "`streamline_layer_thickness_file` cannot be None if `thickness_type` is `normalized_layers`"
+                )
             if layer_thicknesses is None:
-                raise ValueError("`layer_thicknesses` cannot be None if `thickness_type` is `normalized_layers`")
+                raise ValueError(
+                    "`layer_thicknesses` cannot be None if `thickness_type` is `normalized_layers`"
+                )
 
             self.path_layer_thickness = {}
 
@@ -332,10 +360,11 @@ class Isocortex3dProjector(Isocortex2dProjector):
 
                     # Select and order paths to match the projection.
                     self.path_layer_thickness[k] = self.path_layer_thickness[k][
-                        self.path_ordering, :]
+                        self.path_ordering, :
+                    ]
 
     def project_volume(self, volume, thickness_type=None):
-        """ Create a flattened slab view of the volume.
+        """Create a flattened slab view of the volume.
 
         Parameters
         ----------
@@ -354,7 +383,8 @@ class Isocortex3dProjector(Isocortex2dProjector):
 
         if volume.shape != self.volume_shape:
             raise ValueError(
-                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}")
+                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}"
+            )
 
         if thickness_type == "unnormalized":
             project_func = self._project_volume_unnormalized
@@ -368,18 +398,22 @@ class Isocortex3dProjector(Isocortex2dProjector):
         if self.hemisphere == "left":
             projected_volume = project_func(volume)
             if self.view_space_for_other_hemisphere > 0:
-                projected_volume = projected_volume[:-self.view_space_for_other_hemisphere, :, :]
+                projected_volume = projected_volume[
+                    : -self.view_space_for_other_hemisphere, :, :
+                ]
         elif self.hemisphere == "right":
             projected_volume = project_func(np.flip(volume, axis=2))
             if self.view_space_for_other_hemisphere > 0:
-                projected_volume = projected_volume[:-self.view_space_for_other_hemisphere, :, :]
+                projected_volume = projected_volume[
+                    : -self.view_space_for_other_hemisphere, :, :
+                ]
             projected_volume = np.flip(projected_volume, axis=0)
         elif self.hemisphere == "both":
             left = project_func(volume)
             right = project_func(np.flip(volume, axis=2))
             if self.view_space_for_other_hemisphere > 0:
-                left = left[:-self.view_space_for_other_hemisphere, :, :]
-                right = right[:-self.view_space_for_other_hemisphere, :, :]
+                left = left[: -self.view_space_for_other_hemisphere, :, :]
+                right = right[: -self.view_space_for_other_hemisphere, :, :]
             right = np.flip(right, axis=0)
             projected_volume = np.concatenate([left, right], axis=0)
         else:
@@ -388,7 +422,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
         return projected_volume
 
     def _project_volume_unnormalized(self, volume):
-        """ Create a flattened slab view of the volume with thickness as in the volume.
+        """Create a flattened slab view of the volume with thickness as in the volume.
 
         Parameters
         ----------
@@ -401,8 +435,8 @@ class Isocortex3dProjector(Isocortex2dProjector):
             3D slab projection of input volume
         """
         projected_volume = np.zeros(
-            tuple(self.view_size) + (self.paths.shape[1],),
-            dtype=volume.dtype)
+            tuple(self.view_size) + (self.paths.shape[1],), dtype=volume.dtype
+        )
 
         # Get the coordinates for the paths on the surface of the slab
         r, c = np.unravel_index(self.view_lookup[:, 0], self.view_size)
@@ -412,7 +446,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
         return projected_volume
 
     def _project_volume_normalized_full(self, volume):
-        """ Create a flattened slab view of the volume with equal overall thickness.
+        """Create a flattened slab view of the volume with equal overall thickness.
 
         Parameters
         ----------
@@ -425,8 +459,8 @@ class Isocortex3dProjector(Isocortex2dProjector):
             3D slab projection of input volume
         """
         projected_volume = np.zeros(
-            tuple(self.view_size) + (self.paths.shape[1],),
-            dtype=volume.dtype)
+            tuple(self.view_size) + (self.paths.shape[1],), dtype=volume.dtype
+        )
 
         n_paths = self.paths.shape[0]
         full_thickness = self.paths.shape[1]
@@ -443,13 +477,13 @@ class Isocortex3dProjector(Isocortex2dProjector):
 
         # Create flattened set of interpolation locations (spacing out each path)
         flat_interp_locs = np.linspace(
-            spacing,
-            path_thicknesses + spacing,
-            full_thickness).T.flatten()
+            spacing, path_thicknesses + spacing, full_thickness
+        ).T.flatten()
 
         # Find the locations of the parts of the paths with data
-        path_locs = (np.tile(np.arange(full_thickness), (n_paths, 1)) +
-            spacing[:, np.newaxis])[self.paths > 0]
+        path_locs = (
+            np.tile(np.arange(full_thickness), (n_paths, 1)) + spacing[:, np.newaxis]
+        )[self.paths > 0]
 
         # Get the (flattened) values from the volume
         volume_vals = volume.flat[self.paths[self.paths > 0]]
@@ -463,7 +497,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
         return projected_volume
 
     def _project_volume_normalized_layers(self, volume):
-        """ Create a flattened slab view of the volume with equal-thickness layers.
+        """Create a flattened slab view of the volume with equal-thickness layers.
 
         Parameters
         ----------
@@ -476,8 +510,8 @@ class Isocortex3dProjector(Isocortex2dProjector):
             3D slab projection of input volume
         """
         projected_volume = np.zeros(
-            tuple(self.view_size) + (self.paths.shape[1],),
-            dtype=volume.dtype)
+            tuple(self.view_size) + (self.paths.shape[1],), dtype=volume.dtype
+        )
 
         ref_thickness_voxels = self.reference_layer_thicknesses_in_voxels()
 
@@ -499,8 +533,9 @@ class Isocortex3dProjector(Isocortex2dProjector):
         # the end of the actual path in the right place
         path_locs = np.linspace(
             spacing,
-            path_thicknesses * ((max_path_length - 1) / max_nonzero_path_inds) + spacing,
-            max_path_length
+            path_thicknesses * ((max_path_length - 1) / max_nonzero_path_inds)
+            + spacing,
+            max_path_length,
         ).T[self.paths > 0]
 
         # Get the (flattened) values from the volume
@@ -513,13 +548,11 @@ class Isocortex3dProjector(Isocortex2dProjector):
             starts = self.path_layer_thickness[k][:, 0]
             ends = self.path_layer_thickness[k][:, 1]
             interp_locs_for_layer = np.linspace(
-                starts + spacing,
-                ends + spacing,
-                ref_thickness_voxels[k]
+                starts + spacing, ends + spacing, ref_thickness_voxels[k]
             )
 
             # if layer not present in streamline, set to -1
-            layer_absent = (ends == 0)
+            layer_absent = ends == 0
             interp_locs_for_layer[:, layer_absent] = -1
             interp_list.append(interp_locs_for_layer)
         interp_locs = np.vstack(interp_list).T.flatten()
@@ -528,7 +561,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
             interp_locs,
             path_locs,
             volume_vals,
-            left=0 # set values of -1 to 0 (i.e. empty for layers not present)
+            left=0,  # set values of -1 to 0 (i.e. empty for layers not present)
         )
 
         # Fill in the thickness of the slab at correct locations in the volume
@@ -536,7 +569,7 @@ class Isocortex3dProjector(Isocortex2dProjector):
         return projected_volume
 
     def reference_layer_thicknesses_in_voxels(self):
-        """ Get thicknesses of the reference layers in voxel units
+        """Get thicknesses of the reference layers in voxel units
 
         Can be used, for example, for ploting the layer boundaries on a
         projected volume side view
@@ -548,13 +581,15 @@ class Isocortex3dProjector(Isocortex2dProjector):
         """
         full_thickness_voxels = self.paths.shape[1]
         ref_full_thickness = np.sum(list(self.layer_thicknesses.values()))
-        ref_thickness_voxels = {k: int(np.round(full_thickness_voxels * t / ref_full_thickness))
-            for k, t in self.layer_thicknesses.items()}
+        ref_thickness_voxels = {
+            k: int(np.round(full_thickness_voxels * t / ref_full_thickness))
+            for k, t in self.layer_thicknesses.items()
+        }
         return ref_thickness_voxels
 
 
 class BoundaryFinder:
-    """ Boundaries of cortical regions from 2D atlas projections
+    """Boundaries of cortical regions from 2D atlas projections
 
     Parameters
     ----------
@@ -568,7 +603,8 @@ class BoundaryFinder:
 
     """
 
-    def __init__(self,
+    def __init__(
+        self,
         projected_atlas_file,
         labels_file,
         single_hemisphere=True,
@@ -577,22 +613,18 @@ class BoundaryFinder:
 
         # Load the projection
         logging.info("Loading projected atlas file")
-        self.proj_atlas, self.proj_atlas_meta = nrrd.read(
-            projected_atlas_file)
+        self.proj_atlas, self.proj_atlas_meta = nrrd.read(projected_atlas_file)
 
         # Load the labels
-        self.labels_df =  pd.read_csv(
-            labels_file,
-            header=None,
-            sep=r"\s+",
-            index_col=0
-        )
+        self.labels_df = pd.read_csv(labels_file, header=None, sep=r"\s+", index_col=0)
         self.labels_df.columns = ["r", "g", "b", "x0", "x1", "x2", "acronym"]
 
-    def region_boundaries(self,
+    def region_boundaries(
+        self,
         region_acronyms=None,
         hemisphere="left",
-        view_space_for_other_hemisphere=False):
+        view_space_for_other_hemisphere=False,
+    ):
         """Get projection coordinates of region boundaries.
 
         Parameters
@@ -622,8 +654,11 @@ class BoundaryFinder:
             Dictionary of region boundary coordinates with region acronyms
             as keys.
         """
-        region_acronyms, hemisphere, view_space_for_other_hemisphere  = self._validate_inputs(
-            region_acronyms, hemisphere, view_space_for_other_hemisphere)
+        region_acronyms, hemisphere, view_space_for_other_hemisphere = (
+            self._validate_inputs(
+                region_acronyms, hemisphere, view_space_for_other_hemisphere
+            )
+        )
 
         boundaries = {}
         for acronym in region_acronyms:
@@ -658,13 +693,18 @@ class BoundaryFinder:
 
         return boundaries
 
-    def region_masks(self,
+    def region_masks(
+        self,
         region_acronyms=None,
         hemisphere="left",
-        view_space_for_other_hemisphere=False):
+        view_space_for_other_hemisphere=False,
+    ):
 
-        region_acronyms, hemisphere, view_space_for_other_hemisphere  = self._validate_inputs(
-            region_acronyms, hemisphere, view_space_for_other_hemisphere)
+        region_acronyms, hemisphere, view_space_for_other_hemisphere = (
+            self._validate_inputs(
+                region_acronyms, hemisphere, view_space_for_other_hemisphere
+            )
+        )
 
         masks = {}
         for acronym in region_acronyms:
@@ -689,28 +729,33 @@ class BoundaryFinder:
 
         return masks
 
-    def _validate_inputs(self,
-        region_acronyms,
-        hemisphere,
-        view_space_for_other_hemisphere):
+    def _validate_inputs(
+        self, region_acronyms, hemisphere, view_space_for_other_hemisphere
+    ):
 
         if hemisphere not in {"left", "left_for_both", "right", "right_for_both"}:
-            raise ValueError(f"`hemisphere` is {hemisphere}; must be left, right, or right_for_both")
+            raise ValueError(
+                f"`hemisphere` is {hemisphere}; must be left, right, or right_for_both"
+            )
 
         if view_space_for_other_hemisphere:
             if isinstance(view_space_for_other_hemisphere, bool):
                 view_space_for_other_hemisphere = self.proj_atlas.shape[0] // 2
             elif isinstance(view_space_for_other_hemisphere, str):
                 if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
-                    view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
+                    view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[
+                        view_space_for_other_hemisphere
+                    ]
                 else:
-                    raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
+                    raise ValueError(
+                        f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option"
+                    )
         else:
             view_space_for_other_hemisphere = 0
 
         if region_acronyms is None:
             unique_entries = np.unique(self.proj_atlas).tolist()
-            unique_entries.remove(0) # 0 is defined as not a structure
+            unique_entries.remove(0)  # 0 is defined as not a structure
             region_acronyms = self.labels_df.loc[unique_entries, "acronym"].tolist()
         else:
             label_acronym_set = set(self.labels_df["acronym"].tolist())
@@ -722,7 +767,7 @@ class BoundaryFinder:
 
 
 class IsocortexCoordinateProjector:
-    """" Class for projecting CCF coordinates to flattened representation.
+    """ " Class for projecting CCF coordinates to flattened representation.
 
     Can be used without a 2-D view to obtain only depth from pia values
 
@@ -756,14 +801,16 @@ class IsocortexCoordinateProjector:
     #: reach for it there.
     ISOCORTEX_LAYER_KEYS = ISOCORTEX_LAYER_KEYS
 
-    def __init__(self,
+    def __init__(
+        self,
         surface_paths_file,
         closest_surface_voxel_reference_file,
         layer_thicknesses=None,
         streamline_layer_thickness_file=None,
         resolution=(10, 10, 10),
         projection_file=None,
-        chunk_size=1000):
+        chunk_size=1000,
+    ):
 
         self.layer_thicknesses = layer_thicknesses
         self.chunk_size = chunk_size
@@ -773,7 +820,9 @@ class IsocortexCoordinateProjector:
         self.surface_paths_file = surface_paths_file
         with h5py.File(surface_paths_file, "r") as path_f:
             self.paths = path_f["paths"][:]
-            self.volume_shape = tuple(path_f['volume lookup flat'].attrs['original shape'])
+            self.volume_shape = tuple(
+                path_f["volume lookup flat"].attrs["original shape"]
+            )
 
         with h5py.File(closest_surface_voxel_reference_file, "r") as f:
             closest_dset = f["closest surface voxel"]
@@ -800,15 +849,16 @@ class IsocortexCoordinateProjector:
 
         self.resolution = resolution
 
-    def project_coordinates(self,
+    def project_coordinates(
+        self,
         coords,
         scale="voxels",
         thickness_type="unnormalized",
         hemisphere="both",
         view_space_for_other_hemisphere=False,
-        drop_voxels_outside_view_streamlines=False
-        ):
-        """ Project set of coordinates to the flattened slab
+        drop_voxels_outside_view_streamlines=False,
+    ):
+        """Project set of coordinates to the flattened slab
 
         Accuracy is at the voxel level.
 
@@ -865,22 +915,32 @@ class IsocortexCoordinateProjector:
                 "only `project_depths` is available"
             )
         if scale not in {"voxels", "microns"}:
-            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
+            raise ValueError(
+                f"`scale` must be either 'voxels' or 'microns'; was {scale}"
+            )
         if hemisphere not in {"both", "both_mirrored", "right", "left"}:
-            raise ValueError(f"`hemisphere` must be 'both', 'right', or 'left'; was {hemisphere}")
+            raise ValueError(
+                f"`hemisphere` must be 'both', 'right', or 'left'; was {hemisphere}"
+            )
 
         if view_space_for_other_hemisphere:
             if isinstance(view_space_for_other_hemisphere, bool):
                 view_space_for_other_hemisphere = self.view_size[0] // 2
             elif isinstance(view_space_for_other_hemisphere, str):
                 if view_space_for_other_hemisphere in HEMISPHERE_SPACE_VIEW_LOOKUP:
-                    view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[view_space_for_other_hemisphere]
+                    view_space_for_other_hemisphere = HEMISPHERE_SPACE_VIEW_LOOKUP[
+                        view_space_for_other_hemisphere
+                    ]
                 else:
-                    raise ValueError(f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option")
+                    raise ValueError(
+                        f"`view_space_for_other_hemisphere is {view_space_for_other_hemisphere} - unknown string option"
+                    )
         else:
             view_space_for_other_hemisphere = 0
 
-        reflect_coords, voxels, orig_voxels, matching_surface_voxel_ind = self._get_collapsed_voxels_and_surface_voxels(coords)
+        reflect_coords, voxels, orig_voxels, matching_surface_voxel_ind = (
+            self._get_collapsed_voxels_and_surface_voxels(coords)
+        )
 
         projected_2d_coords = self._calculate_2d_coordinates(
             reflect_coords,
@@ -890,15 +950,17 @@ class IsocortexCoordinateProjector:
             scale,
             hemisphere,
             view_space_for_other_hemisphere,
-            drop_voxels_outside_view_streamlines
+            drop_voxels_outside_view_streamlines,
         )
 
-        depths = self._calculate_depths(reflect_coords, voxels, matching_surface_voxel_ind, thickness_type, scale)
+        depths = self._calculate_depths(
+            reflect_coords, voxels, matching_surface_voxel_ind, thickness_type, scale
+        )
 
         return np.array([projected_2d_coords[0], projected_2d_coords[1], depths]).T
 
-    def project_depths(self, coords, thickness_type='unnormalized', scale='voxels'):
-        """ Determine depths of set of CCF coordinates
+    def project_depths(self, coords, thickness_type="unnormalized", scale="voxels"):
+        """Determine depths of set of CCF coordinates
 
         Accuracy is at the voxel level.
 
@@ -926,12 +988,29 @@ class IsocortexCoordinateProjector:
             Depths from pia
         """
         if scale not in {"voxels", "microns"}:
-            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
+            raise ValueError(
+                f"`scale` must be either 'voxels' or 'microns'; was {scale}"
+            )
 
-        reflect_coords, voxels, _, matching_surface_voxel_ind = self._get_collapsed_voxels_and_surface_voxels(coords)
-        return self._calculate_depths(reflect_coords, voxels, matching_surface_voxel_ind, thickness_type=thickness_type, scale=scale)
+        reflect_coords, voxels, _, matching_surface_voxel_ind = (
+            self._get_collapsed_voxels_and_surface_voxels(coords)
+        )
+        return self._calculate_depths(
+            reflect_coords,
+            voxels,
+            matching_surface_voxel_ind,
+            thickness_type=thickness_type,
+            scale=scale,
+        )
 
-    def _calculate_depths(self, coords, voxels, matching_surface_voxel_ind, thickness_type='normalized_layers', scale='voxels'):
+    def _calculate_depths(
+        self,
+        coords,
+        voxels,
+        matching_surface_voxel_ind,
+        thickness_type="normalized_layers",
+        scale="voxels",
+    ):
         coords_in_voxel_scale = coords / self.resolution
         full_thickness_voxels = self.paths.shape[1]
         depth = []
@@ -947,8 +1026,7 @@ class IsocortexCoordinateProjector:
 
             matching_path = self.paths[path_idx, :]
             matching_path = matching_path[matching_path > 0]
-            matching_path_voxels = np.unravel_index(
-                matching_path, self.volume_shape)
+            matching_path_voxels = np.unravel_index(matching_path, self.volume_shape)
             matching_path_voxels = np.array(matching_path_voxels).T
 
             # Find centers at midpoint of voxels
@@ -961,32 +1039,41 @@ class IsocortexCoordinateProjector:
             elif thickness_type == "normalized_full":
                 path_line = LineString3D(path_voxel_centers)
                 depth.append(
-                     path_line.project(coords_in_voxel_scale[i, :], normalized=True)
-                     * full_thickness_voxels
+                    path_line.project(coords_in_voxel_scale[i, :], normalized=True)
+                    * full_thickness_voxels
                 )
             elif thickness_type == "normalized_layers":
-#                 frac_along_path = min_dist_idx / len(matching_path)
+                #                 frac_along_path = min_dist_idx / len(matching_path)
                 # Figure out how long the path is
                 path_thickness = 0
                 for k in self.ISOCORTEX_LAYER_KEYS:
-                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
+                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][
+                        path_idx, :
+                    ]
                     path_thickness += pl_thick
                 # Micron scale, since path thickness reference is in microns
                 path_line = LineString3D(path_voxel_centers * self.resolution)
 
-#                 depth_in_path = frac_along_path * path_thickness
+                #                 depth_in_path = frac_along_path * path_thickness
                 depth_in_path = path_line.project(coords[i, :])
                 ref_layer_top = 0
                 appended = False
                 for k in self.ISOCORTEX_LAYER_KEYS:
-                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][path_idx, :]
+                    pl_start, pl_end, pl_thick = self.path_layer_thickness[k][
+                        path_idx, :
+                    ]
                     if pl_start == 0 and pl_end == 0:
                         # Layer not present - skip it
                         ref_layer_top += self.layer_thicknesses[k]
                         continue
                     if depth_in_path <= pl_end:
-                        fraction_through_layer = (depth_in_path - pl_start) / (pl_end - pl_start)
-                        depth.append(fraction_through_layer * self.layer_thicknesses[k] + ref_layer_top)
+                        fraction_through_layer = (depth_in_path - pl_start) / (
+                            pl_end - pl_start
+                        )
+                        depth.append(
+                            fraction_through_layer * self.layer_thicknesses[k]
+                            + ref_layer_top
+                        )
                         appended = True
                         break
                     else:
@@ -1023,15 +1110,16 @@ class IsocortexCoordinateProjector:
             print("loading path information")
             for i in tqdm(range(0, sorted_indices.shape[0], chunk_size)):
                 # track duplicate info
-                vals, counts = np.unique(sorted_indices[i:i + chunk_size], return_counts=True)
+                vals, counts = np.unique(
+                    sorted_indices[i : i + chunk_size], return_counts=True
+                )
                 arr = volume_lookup_dset[vals]
-                path_ind[i:i + chunk_size] = np.repeat(arr, counts)
+                path_ind[i : i + chunk_size] = np.repeat(arr, counts)
 
         # re-sort
         path_ind = path_ind[unsorter]
 
         return path_ind
-
 
     def _get_collapsed_voxels_and_surface_voxels(self, coords):
         # Convert coordinates to voxels
@@ -1066,21 +1154,21 @@ class IsocortexCoordinateProjector:
         reflect_coords[on_right, 2] = z_size * self.resolution[2] - coords[on_right, 2]
 
         voxels[on_right] = coordinates_to_voxels(
-            reflect_coords[on_right], resolution=self.resolution)
-
+            reflect_coords[on_right], resolution=self.resolution
+        )
 
         # Find the surface voxels that best match the voxels
         voxel_inds = np.ravel_multi_index(
-            tuple(voxels[:, i] for i in range(voxels.shape[1])),
-            self.volume_shape
+            tuple(voxels[:, i] for i in range(voxels.shape[1])), self.volume_shape
         )
         matching_surface_voxel_ind = _matching_voxel_indices(
-            voxel_inds,
-            self.closest_surface_voxels)
+            voxel_inds, self.closest_surface_voxels
+        )
 
         return reflect_coords, voxels, orig_voxels, matching_surface_voxel_ind
 
-    def _calculate_2d_coordinates(self,
+    def _calculate_2d_coordinates(
+        self,
         coords,
         voxels,
         orig_voxels,
@@ -1089,7 +1177,7 @@ class IsocortexCoordinateProjector:
         hemisphere,
         view_space_for_other_hemisphere,
         drop_voxels_outside_view_streamlines=False,
-        ):
+    ):
 
         # Find the flattened projection indices for matching surface voxels
         projected_ind = np.zeros_like(matching_surface_voxel_ind, dtype=int)
@@ -1107,7 +1195,7 @@ class IsocortexCoordinateProjector:
             lookup_ind=1,
             ref_ind=0,
             missing_value=-1,
-            sorter=sorter
+            sorter=sorter,
         )
 
         # Find the path indices for the matching surface voxels
@@ -1118,14 +1206,12 @@ class IsocortexCoordinateProjector:
             surface_voxels_to_find = matching_surface_voxel_ind[
                 (matching_surface_voxel_ind != 0) & (projected_ind == -1)
             ]
-            coords_to_find = np.unravel_index(
-                surface_voxels_to_find,
-                self.volume_shape)
+            coords_to_find = np.unravel_index(surface_voxels_to_find, self.volume_shape)
             coords_to_find = np.array(coords_to_find).T
 
             used_streamline_coords = np.unravel_index(
-                self.view_lookup[:, 1],
-                self.volume_shape)
+                self.view_lookup[:, 1], self.volume_shape
+            )
             used_streamline_coords = np.array(used_streamline_coords).T
 
             # find nearest voxels in chunks to reduce memory footprint
@@ -1134,8 +1220,11 @@ class IsocortexCoordinateProjector:
             for i in range(0, coords_to_find.shape[0], chunk_size):
                 min_dist_idx_list.append(
                     np.argmin(
-                        cdist(coords_to_find[i:i + chunk_size], used_streamline_coords),
-                        axis=1)
+                        cdist(
+                            coords_to_find[i : i + chunk_size], used_streamline_coords
+                        ),
+                        axis=1,
+                    )
                 )
             if min_dist_idx_list:
                 min_dist_idx = np.concatenate(min_dist_idx_list)
@@ -1144,30 +1233,35 @@ class IsocortexCoordinateProjector:
                 # all already in the view, none matched a surface voxel, or the
                 # input was empty - so no chunk was processed above
                 min_dist_idx = np.zeros(0, dtype=int)
-            projected_ind[
-                (matching_surface_voxel_ind != 0) & (projected_ind == -1)
-            ] = self.view_lookup[min_dist_idx, 0]
-
+            projected_ind[(matching_surface_voxel_ind != 0) & (projected_ind == -1)] = (
+                self.view_lookup[min_dist_idx, 0]
+            )
 
         # Convert the flattened indices to 2D coordinates
         projected_coords_not_missing = np.unravel_index(
-            projected_ind[projected_ind != -1],
-            self.view_size
+            projected_ind[projected_ind != -1], self.view_size
         )
 
         # Get x-y offsets for each point
-        ap_offset_list = [] # anterior-posterior
-        lr_offset_list = [] # left-right
+        ap_offset_list = []  # anterior-posterior
+        lr_offset_list = []  # left-right
         # Cache the rotations & rotated line strings
         rot_cache = {}
         rot_paths_cache = {}
         path_starts_cache = {}
-        for c, path_idx in zip(coords[projected_ind != -1, :], path_inds[projected_ind != -1]):
-            if path_idx not in rot_cache or path_idx not in rot_paths_cache or path_idx not in path_starts_cache:
+        for c, path_idx in zip(
+            coords[projected_ind != -1, :], path_inds[projected_ind != -1]
+        ):
+            if (
+                path_idx not in rot_cache
+                or path_idx not in rot_paths_cache
+                or path_idx not in path_starts_cache
+            ):
                 matching_path = self.paths[path_idx, :]
                 matching_path = matching_path[matching_path > 0]
                 matching_path_voxels = np.unravel_index(
-                    matching_path, self.volume_shape)
+                    matching_path, self.volume_shape
+                )
                 matching_path_voxels = np.array(matching_path_voxels).T
 
                 matching_path_microns = matching_path_voxels * self.resolution
@@ -1201,9 +1295,13 @@ class IsocortexCoordinateProjector:
 
         projected_coords_x = np.zeros_like(projected_ind, dtype=float)
         projected_coords_y = np.zeros_like(projected_ind, dtype=float)
-        projected_coords_x[projected_ind != -1] = projected_coords_not_missing[0] + lr_offsets
+        projected_coords_x[projected_ind != -1] = (
+            projected_coords_not_missing[0] + lr_offsets
+        )
         projected_coords_x[projected_ind == -1] = np.nan
-        projected_coords_y[projected_ind != -1] = projected_coords_not_missing[1] + ap_offsets
+        projected_coords_y[projected_ind != -1] = (
+            projected_coords_not_missing[1] + ap_offsets
+        )
         projected_coords_y[projected_ind == -1] = np.nan
 
         if hemisphere in ("both", "both_mirrored"):
@@ -1214,16 +1312,18 @@ class IsocortexCoordinateProjector:
             voxels_on_right = orig_voxels[:, 2] > z_midline
 
             # Need to double max_x because there's space for both hemispheres
-            projected_coords_x[voxels_on_right] = 2 * max_x - projected_coords_x[voxels_on_right]
+            projected_coords_x[voxels_on_right] = (
+                2 * max_x - projected_coords_x[voxels_on_right]
+            )
 
             if hemisphere == "both_mirrored":
                 # Mirror everything across hemispheres
                 projected_coords_x = 2 * max_x - projected_coords_x
         elif hemisphere == "right":
-                # everything is already on the left hemisphere, so if we
-                # want it on the right instead, need to reflect the first dimension
-                max_x = self.view_size[0] - view_space_for_other_hemisphere
-                projected_coords_x = max_x - projected_coords_x
+            # everything is already on the left hemisphere, so if we
+            # want it on the right instead, need to reflect the first dimension
+            max_x = self.view_size[0] - view_space_for_other_hemisphere
+            projected_coords_x = max_x - projected_coords_x
         elif hemisphere == "left":
             # everything is already on the left hemisphere
             pass
@@ -1231,13 +1331,15 @@ class IsocortexCoordinateProjector:
         if scale == "microns":
             # first dimension is left-right (z in CCF),
             # second dimension is anterior-posterior (x in CCF)
-            return projected_coords_x * self.resolution[2], projected_coords_y * self.resolution[0]
+            return projected_coords_x * self.resolution[
+                2
+            ], projected_coords_y * self.resolution[0]
         else:
             return projected_coords_x, projected_coords_y
 
 
 class IsocortexEntireProjector:
-    """ Projection of common cortical framework volumes using every streamline
+    """Projection of common cortical framework volumes using every streamline
 
     Parameters
     ----------
@@ -1263,7 +1365,7 @@ class IsocortexEntireProjector:
         return paths
 
     def project_volume(self, volume, kind="max"):
-        """ Perform an operation across all streamlines
+        """Perform an operation across all streamlines
 
         Parameters
         ----------
@@ -1279,11 +1381,13 @@ class IsocortexEntireProjector:
         """
         if kind not in {"max", "min", "mean", "average", "sum"}:
             raise ValueError(
-                f"`kind` must be 'max', 'min', 'mean', 'average', or 'sum'; was {kind}")
+                f"`kind` must be 'max', 'min', 'mean', 'average', or 'sum'; was {kind}"
+            )
 
         if volume.shape != self.volume_shape:
             raise ValueError(
-                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}")
+                f"Input volume must match lookup volume shape; {volume.shape} != {self.volume_shape}"
+            )
 
         if np.issubdtype(volume.dtype, np.integer):
             min_val = np.iinfo(volume.dtype).min
@@ -1293,7 +1397,6 @@ class IsocortexEntireProjector:
             max_val = np.finfo(volume.dtype).max
         else:
             raise ValueError("volume must have either integer or float data type")
-
 
         if kind == "max":
             # The path specification assumes the first point in the volume is not a
@@ -1311,17 +1414,17 @@ class IsocortexEntireProjector:
             values = path_values.min(axis=1)
         elif kind == "mean" or kind == "average":
             values = np.nanmean(
-                np.where(self.paths > 0, volume.flat[self.paths], np.nan),
-                axis=1)
+                np.where(self.paths > 0, volume.flat[self.paths], np.nan), axis=1
+            )
         elif kind == "sum":
             values = np.nansum(
-                np.where(self.paths > 0, volume.flat[self.paths], np.nan),
-                axis=1)
+                np.where(self.paths > 0, volume.flat[self.paths], np.nan), axis=1
+            )
 
         return values
 
-    def top_of_streamline_coords(self, scale='voxels'):
-        """ Get the 3D coordinates of the first voxels of every streamline
+    def top_of_streamline_coords(self, scale="voxels"):
+        """Get the 3D coordinates of the first voxels of every streamline
 
         The order of coordinates is consistent with the order returned by `project_volume()`.
 
@@ -1337,11 +1440,12 @@ class IsocortexEntireProjector:
             as `values`.
         """
         if scale not in {"voxels", "microns"}:
-            raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
+            raise ValueError(
+                f"`scale` must be either 'voxels' or 'microns'; was {scale}"
+            )
 
         first_voxels = self.paths[:, 0]
-        first_voxel_coords = np.unravel_index(
-            first_voxels, self.volume_shape)
+        first_voxel_coords = np.unravel_index(first_voxels, self.volume_shape)
         first_voxel_coords = np.array(first_voxel_coords).T
 
         if scale == "voxels":
@@ -1356,7 +1460,7 @@ _checked_lookup_orders = weakref.WeakValueDictionary()
 
 
 def _check_lookup_is_ordered(matching_voxel_lookup, lookup_ind, sorter):
-    """ Raise if the column `_matching_voxel_indices` searches is out of order.
+    """Raise if the column `_matching_voxel_indices` searches is out of order.
 
     `np.searchsorted` assumes non-decreasing keys and does not verify it, so an
     unordered reference file used to yield wrong voxels rather than an error.
@@ -1424,8 +1528,9 @@ def _matching_voxel_indices(
     lookup_ind=0,
     ref_ind=1,
     missing_value=0,
-    sorter=None):
-    """ Finds matching (flattened) voxels in lookup. Missing values return `missing_value`.
+    sorter=None,
+):
+    """Finds matching (flattened) voxels in lookup. Missing values return `missing_value`.
 
     The lookup column must be in increasing order, or in the order given by `sorter`
     when one is supplied; `ValueError` is raised if it is not.
@@ -1451,5 +1556,7 @@ def _matching_voxel_indices(
         lookup_rows = sorter[lookup_rows]
     has_match = in_range & (lookup_keys[lookup_rows] == voxel_inds)
 
-    matching_voxel_ind[has_match] = matching_voxel_lookup[lookup_rows[has_match], ref_ind]
+    matching_voxel_ind[has_match] = matching_voxel_lookup[
+        lookup_rows[has_match], ref_ind
+    ]
     return matching_voxel_ind

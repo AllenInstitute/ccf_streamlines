@@ -32,16 +32,15 @@ def test_one_value_per_streamline_in_file_order(projector, mini_ccf, ramp_volume
 
 
 @pytest.mark.parametrize(
-    "kind,expected", [("max", 8.0), ("min", 1.0), ("mean", 4.5), ("average", 4.5), ("sum", 36.0)]
+    "kind,expected",
+    [("max", 8.0), ("min", 1.0), ("mean", 4.5), ("average", 4.5), ("sum", 36.0)],
 )
 def test_each_aggregation(projector, mini_ccf, ramp_volume, kind, expected):
     values = projector.project_volume(ramp_volume, kind=kind)
     assert values[0] == pytest.approx(expected)
 
 
-def test_streamlines_absent_from_any_view_are_still_projected(
-    projector, mini_ccf
-):
+def test_streamlines_absent_from_any_view_are_still_projected(projector, mini_ccf):
     """This class covers every streamline, including those no view uses."""
     path_index = int(mini_ccf.out_of_view_path_indices[0])
     volume = mini_ccf.volume()
@@ -63,9 +62,7 @@ def test_top_coordinates_are_the_first_voxel_of_each_streamline(projector, mini_
         assert np.array_equal(coords[i], mini_ccf.path_voxels(i)[0])
 
 
-def test_top_coordinates_are_ordered_to_match_project_volume(
-    projector, mini_ccf
-):
+def test_top_coordinates_are_ordered_to_match_project_volume(projector, mini_ccf):
     """The documented correspondence: element *i* of the projected values is
     the streamline whose top is row *i* here.
 

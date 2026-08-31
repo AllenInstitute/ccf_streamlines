@@ -1,17 +1,18 @@
 """Path cleaning, against paths with known repeats."""
 
 import numpy as np
-import pytest
 
 from ccf_streamlines.processing import remove_duplicate_voxels_from_paths
 
 
 def test_consecutive_duplicates_are_removed_and_the_row_is_refilled():
     """Duplicates collapse and the row is left-packed, padded back to width."""
-    paths = np.array([
-        [5, 5, 7, 7, 9, 0, 0, 0],
-        [2, 3, 4, 0, 0, 0, 0, 0],
-    ])
+    paths = np.array(
+        [
+            [5, 5, 7, 7, 9, 0, 0, 0],
+            [2, 3, 4, 0, 0, 0, 0, 0],
+        ]
+    )
 
     result = remove_duplicate_voxels_from_paths(paths)
 
@@ -39,10 +40,12 @@ def test_a_long_run_collapses_to_one_voxel():
 
 
 def test_rows_are_cleaned_independently():
-    paths = np.array([
-        [1, 1, 1, 2, 0, 0],
-        [3, 4, 5, 6, 7, 0],
-    ])
+    paths = np.array(
+        [
+            [1, 1, 1, 2, 0, 0],
+            [3, 4, 5, 6, 7, 0],
+        ]
+    )
     result = remove_duplicate_voxels_from_paths(paths)
     assert np.array_equal(result[0], np.array([1, 2, 0, 0, 0, 0]))
     assert np.array_equal(result[1], np.array([3, 4, 5, 6, 7, 0]))
@@ -69,10 +72,12 @@ def test_matches_the_inline_deduplication_in_metrics():
     """`metrics.measure_streamline_layer_thicknesses` re-implements this with a
     Python loop instead of calling it. The two must agree, or layer depths are
     measured against different paths than everything else."""
-    paths = np.array([
-        [5, 5, 7, 7, 9, 0, 0, 0],
-        [2, 3, 3, 0, 0, 0, 0, 0],
-    ])
+    paths = np.array(
+        [
+            [5, 5, 7, 7, 9, 0, 0, 0],
+            [2, 3, 3, 0, 0, 0, 0, 0],
+        ]
+    )
 
     vectorized = remove_duplicate_voxels_from_paths(paths.copy())
 
@@ -81,6 +86,6 @@ def test_matches_the_inline_deduplication_in_metrics():
     paths_diff = np.diff(paths, axis=1)
     for i in range(paths.shape[0]):
         unique_inds = np.flatnonzero(paths_diff[i, :])
-        inline[i, :len(unique_inds)] = paths[i, :][unique_inds]
+        inline[i, : len(unique_inds)] = paths[i, :][unique_inds]
 
     assert np.array_equal(vectorized, inline)

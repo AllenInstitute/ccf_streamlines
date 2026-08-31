@@ -248,7 +248,10 @@ class MiniCCF:
         """All ``(row, col)`` view pixels a streamline is referenced by."""
         rows = np.flatnonzero(self.view_path_indices == path_index)
         return [
-            tuple(int(v) for v in np.unravel_index(int(self.view_lookup[r, 0]), self.view_size))
+            tuple(
+                int(v)
+                for v in np.unravel_index(int(self.view_lookup[r, 0]), self.view_size)
+            )
             for r in rows
         ]
 
@@ -287,7 +290,8 @@ def _check_padded_length(padded_length, layer_thicknesses):
     """
     total = float(np.sum(list(layer_thicknesses.values())))
     blocks = {
-        k: int(np.round(padded_length * t / total)) for k, t in layer_thicknesses.items()
+        k: int(np.round(padded_length * t / total))
+        for k, t in layer_thicknesses.items()
     }
     block_sum = sum(blocks.values())
     if block_sum != padded_length:
@@ -426,7 +430,12 @@ def _check_invariants(mini, flat_lookup, closest):
     for acronym, (rows, cols) in mini.atlas_regions.items():
         r0, r1, _ = rows.indices(mini.atlas.shape[0])
         c0, c1, _ = cols.indices(mini.atlas.shape[1])
-        if r0 < 1 or r1 > mini.atlas.shape[0] - 1 or c0 < 1 or c1 > mini.atlas.shape[1] - 1:
+        if (
+            r0 < 1
+            or r1 > mini.atlas.shape[0] - 1
+            or c0 < 1
+            or c1 > mini.atlas.shape[1] - 1
+        ):
             raise ValueError(
                 f"atlas region {acronym} touches an edge of the {mini.atlas.shape} "
                 f"atlas, so its contour would be open rather than a closed loop."
@@ -611,9 +620,7 @@ def build_mini_ccf(
     for zi, z in enumerate(z_positions):
         for xi, x in enumerate(x_positions):
             path_index = int(
-                np.flatnonzero(
-                    (path_starts[:, 0] == x) & (path_starts[:, 2] == z)
-                )[0]
+                np.flatnonzero((path_starts[:, 0] == x) & (path_starts[:, 2] == z))[0]
             )
             view_flat = int(np.ravel_multi_index((zi, xi), view_size))
             view_rows.append((view_flat, int(paths[path_index, 0])))
@@ -626,7 +633,9 @@ def build_mini_ccf(
     tie_row = view_size[0] // 2 - 1
     for t in range(n_tied_view_rows):
         duplicated = t * (len(x_positions) + 1) % len(view_path_index)
-        view_flat = int(np.ravel_multi_index((tie_row, view_size[1] - 1 - t), view_size))
+        view_flat = int(
+            np.ravel_multi_index((tie_row, view_size[1] - 1 - t), view_size)
+        )
         if view_flat <= view_rows[duplicated][0]:
             raise ValueError(
                 "a tie-creating view row must carry a larger view index than the "
@@ -654,11 +663,13 @@ def build_mini_ccf(
     # point.
     one_voxel = float(np.mean(resolution))
     ref_total = float(np.sum(list(layer_thicknesses.values())))
-    path_layer_thickness = {k: np.zeros((n_paths, 3), dtype=np.float32) for k in LAYER_KEYS}
+    path_layer_thickness = {
+        k: np.zeros((n_paths, 3), dtype=np.float32) for k in LAYER_KEYS
+    }
     for i in range(n_paths):
-        xyz = np.array(np.unravel_index(paths[i, :][paths[i, :] > 0], volume_shape)).T * np.array(
-            resolution
-        )
+        xyz = np.array(
+            np.unravel_index(paths[i, :][paths[i, :] > 0], volume_shape)
+        ).T * np.array(resolution)
         arc = float(np.sqrt((np.diff(xyz, axis=0) ** 2).sum(axis=1)).sum())
         target_total = arc + one_voxel
 

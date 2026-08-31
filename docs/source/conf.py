@@ -6,17 +6,17 @@
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-import sys
 import os
 import re
+import sys
 
 _REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, os.path.join(_REPO_ROOT, "src"))
 
 
-project = 'ccf_streamlines'
-copyright = '2022-2026, Allen Institute'
-author = 'Nathan Gouwens'
+project = "ccf_streamlines"
+copyright = "2022-2026, Allen Institute"
+author = "Nathan Gouwens"
 
 # Single-sourced from pyproject.toml so the docs cannot drift from the package
 # version. Read directly rather than via importlib.metadata, since Read the Docs
@@ -28,13 +28,13 @@ with open(os.path.join(_REPO_ROOT, "pyproject.toml")) as _f:
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#general-configuration
 
 extensions = [
-    'sphinx.ext.autodoc',
-    'sphinx.ext.autosummary',
-    'sphinx.ext.napoleon',
-    'sphinx.ext.autosectionlabel',
+    "sphinx.ext.autodoc",
+    "sphinx.ext.autosummary",
+    "sphinx.ext.napoleon",
+    "sphinx.ext.autosectionlabel",
 ]
 
-templates_path = ['_templates']
+templates_path = ["_templates"]
 exclude_patterns = []
 
 autodoc_mock_imports = ["h5py", "numpy", "scipy", "pandas", "nrrd", "tqdm", "skimage"]
@@ -50,7 +50,7 @@ linkcheck_ignore = [
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output
 
-html_theme = 'pydata_sphinx_theme'
+html_theme = "pydata_sphinx_theme"
 
 # html_static_path is deliberately unset: the tree keeps no _static directory,
 # and pointing the setting at a missing one was the build's only warning.
@@ -58,4 +58,3 @@ html_theme = 'pydata_sphinx_theme'
 html_theme_options = {
     "github_url": "https://github.com/AllenInstitute/ccf_streamlines",
 }
-

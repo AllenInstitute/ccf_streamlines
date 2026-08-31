@@ -41,7 +41,9 @@ def test_at_least_three_lateral_positions(mini_ccf):
 
 
 def test_planes_at_both_ends_of_the_dorsoventral_axis_are_outside_cortex(mini_ccf):
-    voxels = np.vstack([mini_ccf.path_voxels(i) for i in range(mini_ccf.paths.shape[0])])
+    voxels = np.vstack(
+        [mini_ccf.path_voxels(i) for i in range(mini_ccf.paths.shape[0])]
+    )
     y_size = mini_ccf.volume_shape[1]
     assert voxels[:, 1].min() >= 1
     assert voxels[:, 1].max() <= y_size - 2
@@ -65,7 +67,10 @@ def test_flat_lookup_is_populated_only_at_streamline_starts(mini_ccf):
 
     with h5py.File(mini_ccf.surface_paths_file, "r") as f:
         flat = f["volume lookup flat"][:]
-        assert tuple(f["volume lookup flat"].attrs["original shape"]) == mini_ccf.volume_shape
+        assert (
+            tuple(f["volume lookup flat"].attrs["original shape"])
+            == mini_ccf.volume_shape
+        )
 
     for i in range(mini_ccf.paths.shape[0]):
         row = mini_ccf.paths[i, :]
@@ -119,7 +124,9 @@ def test_layer_thicknesses_sum_to_arc_length_plus_one_voxel(mini_ccf):
     """
     one_voxel = float(np.mean(mini_ccf.resolution))
     for i in range(mini_ccf.paths.shape[0]):
-        total = sum(float(mini_ccf.path_layer_thickness[k][i, 2]) for k in mc.LAYER_KEYS)
+        total = sum(
+            float(mini_ccf.path_layer_thickness[k][i, 2]) for k in mc.LAYER_KEYS
+        )
         assert total == pytest.approx(mini_ccf.path_arc_length(i) + one_voxel, abs=1e-2)
 
 

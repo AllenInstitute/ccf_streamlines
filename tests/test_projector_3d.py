@@ -105,7 +105,12 @@ def test_block_sizes_follow_the_reference_thicknesses(mini_ccf):
         streamline_layer_thickness_file=mini_ccf.layer_thickness_file,
     )
     assert list(projector.reference_layer_thicknesses_in_voxels().values()) == [
-        1, 3, 2, 3, 2, 1
+        1,
+        3,
+        2,
+        3,
+        2,
+        1,
     ]
 
 
@@ -244,4 +249,6 @@ def test_per_streamline_thicknesses_are_ordered_to_match_the_view(
         loaded = normalized_layers.path_layer_thickness[key]
         assert loaded.shape[0] == mini_ccf.view_lookup.shape[0]
         for row, path_index in enumerate(mini_ccf.view_path_indices):
-            assert np.allclose(loaded[row], mini_ccf.path_layer_thickness[key][path_index])
+            assert np.allclose(
+                loaded[row], mini_ccf.path_layer_thickness[key][path_index]
+            )
