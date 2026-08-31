@@ -62,6 +62,25 @@ def unambiguous_path(mini_ccf):
     return paths[0]
 
 
+def _mirrored_voxel(mini_ccf, voxel):
+    """The voxel on the other side of the midline, mirrored correctly.
+
+    Voxel z spans ``[z, z+1)`` with centre ``z + 0.5``; reflecting that centre
+    about the midline plane at ``z_size / 2`` gives ``(z_size - 1 - z) + 0.5``,
+    the centre of voxel ``z_size - 1 - z``. That is what ``np.flip`` does, and
+    it is what the coordinate projector's *micron* reflection does.
+
+    It is not what the coordinate projector's *voxel* reflection does -- that
+    uses ``z_size - z``, one voxel out. Tests here build their input with the
+    correct convention regardless, so they do not bake the defect into their
+    own setup; the defect itself is pinned under "reflection consistency" at
+    the bottom of this file.
+    """
+    mirrored = np.array(voxel).copy()
+    mirrored[2] = mini_ccf.volume_shape[2] - 1 - mirrored[2]
+    return mirrored
+
+
 #: Queries are made with drop-outside on, which sidesteps the empty-search
 #: crash pinned in tests/test_pinned_contributions.py. Once #13 lands this can
 #: be dropped.
@@ -307,31 +326,40 @@ def test_both_keeps_each_coordinate_on_its_own_side(
 ):
     """A right-hemisphere coordinate is placed in the right half of the view.
 
-    Note the coordinate projector reflects with ``z_size - z``; the volume
-    projectors use ``np.flip``, which is ``z_size - 1 - z``. See
-    ``test_projector_2d.test_the_two_hemisphere_mirroring_conventions_differ_by_one_voxel``.
+    The input is built with the correct mirror, ``z_size - 1 - z``, so this
+    test does not depend on the reflection defect being present.
+
+    The left coordinate is asserted exactly. The right one is only asserted to
+    land in the right half, because its exact position is currently one voxel
+    short of the mirrored row: the voxel reflection resolves it to the
+    neighbouring streamline. Once that is fixed it will sit exactly at
+    ``2 * max_x - expected_row``. The defect is pinned under "reflection
+    consistency" at the bottom of this file, and is not re-asserted here.
     """
-    z_size = mini_ccf.volume_shape[2]
-    voxel = mini_ccf.path_voxels(unambiguous_path)[3].copy()
-    left_coord = (voxel * np.array(mini_ccf.resolution)).astype(float)
-    voxel[2] = z_size - voxel[2]
-    right_coord = (voxel * np.array(mini_ccf.resolution)).astype(float)
+    voxel = mini_ccf.path_voxels(unambiguous_path)[3]
+    resolution = np.array(mini_ccf.resolution)
+    left_coord = (voxel * resolution).astype(float)
+    right_coord = (_mirrored_voxel(mini_ccf, voxel) * resolution).astype(float)
 
     result = projector.project_coordinates(
         np.vstack([left_coord, right_coord]), hemisphere="both", **DROP
     )
 
     expected_row, _ = mini_ccf.view_pixel_for_path(unambiguous_path)
+    max_x = mini_ccf.view_size[0]
+
     assert result[0, 0] == expected_row
-    assert result[1, 0] == 2 * mini_ccf.view_size[0] - expected_row
+    assert result[0, 0] < max_x, "the left coordinate stays in the left half"
+    assert result[1, 0] > max_x, "the right coordinate moves to the right half"
 
 
-def test_both_mirrored_swaps_the_sides(projector, mini_ccf):
-    z_size = mini_ccf.volume_shape[2]
-    voxel = mini_ccf.path_voxels(0)[3].copy()
-    left_coord = (voxel * np.array(mini_ccf.resolution)).astype(float)
-    voxel[2] = z_size - voxel[2]
-    right_coord = (voxel * np.array(mini_ccf.resolution)).astype(float)
+def test_both_mirrored_swaps_the_sides(projector, mini_ccf, unambiguous_path):
+    """The relation asserted here holds whichever mirror the input uses, but
+    the input is built with the correct one anyway."""
+    voxel = mini_ccf.path_voxels(unambiguous_path)[3]
+    resolution = np.array(mini_ccf.resolution)
+    left_coord = (voxel * resolution).astype(float)
+    right_coord = (_mirrored_voxel(mini_ccf, voxel) * resolution).astype(float)
     coords = np.vstack([left_coord, right_coord])
 
     plain = projector.project_coordinates(coords, hemisphere="both", **DROP)
@@ -435,16 +463,17 @@ def test_projecting_without_a_projection_file_raises_a_clear_error(mini_ccf):
 # exact integers) but it means the rest of this file cannot see the mismatch.
 # These tests query voxel centres instead.
 #
-# NOTE for whoever fixes this. Changing line 1018 to `z_size - 1 - z` makes the
-# two xfail tests below pass, and also breaks
-# `test_both_keeps_each_coordinate_on_its_own_side` and
-# `test_both_mirrored_swaps_the_sides`: those build their right-hemisphere
-# input by mirroring a left voxel with the *current* convention, so under the
-# new one the constructed point lands one voxel off the streamline. They need
-# their construction updated in the same change. That is a property of the
-# tests, not further evidence of a bug -- but it is a real signal that this is
-# a behaviour change for every right-hemisphere coordinate, not a silent
-# correction.
+# NOTE for whoever fixes this. Changing line 1018 to `z_size - 1 - z` turns the
+# two xfail tests below into XPASS(strict) and breaks nothing else in this
+# file: every test that builds a right-hemisphere input does so through
+# `_mirrored_voxel`, which uses the correct convention, so none of them has the
+# defect baked into its own setup.
+#
+# It is still a behaviour change for every right-hemisphere coordinate, not a
+# silent correction -- the exact placement asserted by
+# `test_both_keeps_each_coordinate_on_its_own_side` moves by one voxel, which
+# is why that test bounds the right-hand coordinate to the correct half rather
+# than pinning an exact column that is currently wrong.
 
 
 MIRROR_OFF_BY_ONE = (
