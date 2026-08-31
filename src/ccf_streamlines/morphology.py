@@ -19,6 +19,10 @@ def load_swc_as_dataframe(swc_file):
         - r : radius
         - parent_id : identifier of parent node
 
+    Fields may be separated by any run of whitespace - a single space, several
+    spaces, or tabs - since SWC writers differ on that point (MorphIO, for
+    example, pads its columns).
+
     Parameters
     ----------
     swc_file : str
@@ -31,7 +35,7 @@ def load_swc_as_dataframe(swc_file):
     """
     return pd.read_table(
         swc_file,
-        sep=" ",
+        sep=r"\s+",
         comment="#",
         names=["id", "type", "x", "y", "z", "r", "parent_id"],
     )
