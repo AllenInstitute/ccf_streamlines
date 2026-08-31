@@ -1086,8 +1086,9 @@ class IsocortexCoordinateProjector:
             if min_dist_idx_list:
                 min_dist_idx = np.concatenate(min_dist_idx_list)
             else:
-                # nothing to look up - every matching surface voxel is already
-                # used by the view, so no chunk was processed above
+                # no surface voxels need a nearest-streamline lookup: they are
+                # all already in the view, none matched a surface voxel, or the
+                # input was empty - so no chunk was processed above
                 min_dist_idx = np.zeros(0, dtype=int)
             projected_ind[
                 (matching_surface_voxel_ind != 0) & (projected_ind == -1)
