@@ -44,6 +44,14 @@ xfail_strict = true
 # The package supports 3.9, so the linter must not suggest syntax newer than that
 # even when it is run under a newer interpreter.
 target-version = "py39"
+# Claude Code puts its git worktrees under .claude/worktrees/, each a full copy
+# of this repo at whatever commit it was cut from. Ruff has no reason to walk
+# into them: they are separate checkouts that lint themselves against their own
+# config, and any of them predating the ruff adoption reports the entire
+# pre-format tree as errors. Nothing under .claude is gitignored, so ruff's
+# usual .gitignore filtering does not cover this. Only the worktrees are
+# excluded, so a future .claude/*.py of our own would still be checked.
+extend-exclude = [".claude/worktrees"]
 
 [tool.ruff.lint]
 # E/W/F are the pycodestyle + pyflakes baseline; I keeps import blocks sorted;
