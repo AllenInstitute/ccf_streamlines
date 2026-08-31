@@ -15,7 +15,7 @@ network access, no database, no state outside the caller's arrays.
     uv sync                       # install; requires-python >=3.9
     uv run pytest                 # whole suite; seconds, no data files needed
     CCF_STREAMLINES_TEST_DATA=... uv run pytest -m real_data   # opt-in tier, real assets
-    cd docs && make html          # Sphinx docs -> docs/build (needs docs/requirements.txt: sphinx 5.2.3)
+    cd docs && make html          # Sphinx docs -> docs/build (needs docs/requirements.txt: sphinx 9.1.0)
     uv run ruff check --fix .     # lint
     uv run ruff format .          # format
 
@@ -167,8 +167,11 @@ to PyPI on GitHub release.
 - `tests/test_real_data.py` imports from `tests.mini_ccf` *after* a
   `pytest.importorskip("h5py")`, so the import carries a `# noqa: E402`. It is the only
   suppression in the repo; the rest of the tree is clean under the configured rules.
-- `docs/source/reference/processing.rst` titles itself `ccf_streamlines.projection` — wrong
-  module name in the heading.
+- The Read the Docs build (`.readthedocs.yaml`) is pinned to `ubuntu-24.04` / Python 3.12 and
+  runs with `fail_on_warning: true`. It does not install the package — `conf.py` mocks the
+  third-party imports and regex-scrapes the version out of `pyproject.toml` — so the docs
+  build is independent of the `requires-python` floor. The build is warning-free as pinned;
+  a new Sphinx warning will fail the RTD build rather than land silently.
 - A stale, untracked `ccf_streamlines.egg-info/` sits in the repo root from the pre-uv
   setuptools build. It is not the build source; `uv_build` is (`pyproject.toml`).
 

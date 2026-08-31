@@ -2,7 +2,7 @@
 
 .. module:: ccf_streamlines.processing
 
-Utility Processing Functions (:mod:`ccf_streamlines.projection`)
+Utility Processing Functions (:mod:`ccf_streamlines.processing`)
 ================================================================
 
 Functions used to process original streamlines files into more consistent representations.
