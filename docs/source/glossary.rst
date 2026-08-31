@@ -10,20 +10,25 @@ than by a thread.
     :sorted:
 
     streamline
-        A path of voxels running from the pia to the white matter at one point
+        A chain of voxels running from the pia to the white matter at one point
         on the cortical surface, precomputed by solving Laplace's equation
         across isocortex. There are 1,476,024 of them at 10 micron resolution.
         A streamline is identified by its index into the ``paths`` dataset, and
         is *ordered*: element 0 is the pia end.
 
-        Not to be confused with a :term:`path` in the file-system sense; the
-        library's own parameter names (``surface_paths_file``) unfortunately
-        use both senses in one identifier.
-
     path
-        In ``paths``, ``path_ind``, ``path_ordering``, ``matching_path``: a
-        :term:`streamline`. In ``*_file`` parameters: a file-system path.
-        The library never uses "path" to mean a 2-D trajectory.
+        Always a :term:`streamline` -- never a file-system path, and never a
+        2-D trajectory. Every identifier in the package that contains "path"
+        means streamline: ``paths``, ``path_ind``, ``path_ordering``,
+        ``matching_path``, ``path_thicknesses``, ``max_path_length``.
+
+        Where a parameter names a file it is the ``_file`` suffix that says so,
+        not the word "path": ``surface_paths_file`` is *the file of surface
+        paths*, i.e. the file holding the streamlines. The one parameter that
+        breaks the suffix convention, ``surface_paths`` in
+        :func:`~ccf_streamlines.angle.find_closest_streamline`, accepts either
+        a filename or an open HDF5 handle -- but it too is named for the
+        streamlines it yields, not for a location on disk.
 
     flat index
         A single integer identifying a voxel, obtained by

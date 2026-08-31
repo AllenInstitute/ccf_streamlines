@@ -55,9 +55,11 @@ rounded blocks must sum exactly. Swept against the real layer ratios, only 11,
 minimum with all six layers present, but twelve gives layer 4 two voxels rather
 than one.
 
-The format was established by **inspecting the real assets**, not by trusting
-`data_file_info.md`, which turned out to describe a superseded generation of
-the files. Two findings materially changed construction:
+The format was established by **inspecting the real assets**. The repository's
+notes on them described a superseded generation of the files and were wrong in
+several particulars, so they were not trusted, and they have since been removed
+rather than corrected — a prose note that nothing checks drifts again. Two
+findings materially changed construction:
 
 - the flat volume lookup is populated **only at streamline start voxels**
   (~0.12% fill), not along whole streamlines;
@@ -65,7 +67,9 @@ the files. Two findings materially changed construction:
   scale layer thicknesses to the miniature arc length or every layer-normalized
   depth returns the missing-value sentinel.
 
-`data_file_info.md` has been corrected accordingly.
+The format description now lives in `tests/mini_ccf.py`, next to the code that
+depends on it, and every claim it makes is asserted against the real files by
+`tests/test_real_data.py`. A claim that stops being true fails a test.
 
 ## Consequences
 
