@@ -95,8 +95,13 @@ def test_without_a_sorter_an_unsorted_lookup_returns_wrong_answers_silently():
 
     ``np.searchsorted`` assumes a sorted array and does not check. Nothing in
     the package validates the reference file's ordering, so an unsorted lookup
-    yields wrong voxels rather than an error. Documented here so the assumption
-    is visible.
+    yields a wrong answer rather than an error. Documented here so the
+    assumption is visible.
+
+    Since membership is read off the same binary search, a query the search
+    lands next to a non-matching key is now reported missing rather than
+    resolved to an unrelated row. Still silent, still wrong -- do not read this
+    as the ordering being checked.
     """
     unsorted = np.array([
         [1, 300],
@@ -151,3 +156,46 @@ def test_the_result_dtype_is_integer(lookup):
 def test_the_result_has_the_shape_of_the_query(lookup):
     query = np.array([10, 20, 30, 40, 50])
     assert _matching_voxel_indices(query, lookup).shape == query.shape
+
+
+def test_a_query_past_the_last_key_is_missing(lookup):
+    """The binary search runs off the end of the table here.
+
+    There is no row at the returned insertion point to compare against, so the
+    "is it present?" answer has to come from somewhere other than an index.
+    """
+    result = _matching_voxel_indices(
+        np.array([40, 41, 10_000]), lookup, missing_value=-1)
+    assert np.array_equal(result, np.array([100, -1, -1]))
+
+
+def test_an_empty_lookup_returns_all_missing():
+    result = _matching_voxel_indices(
+        np.array([1, 2, 3]), np.zeros((0, 2), dtype=int), missing_value=-1)
+    assert np.array_equal(result, np.array([-1, -1, -1]))
+
+
+@pytest.mark.parametrize("with_sorter", [False, True])
+def test_the_key_column_is_never_scanned_end_to_end(lookup, monkeypatch, with_sorter):
+    """The helper must not pay a cost proportional to the size of the lookup.
+
+    It used to ask ``np.isin`` whether each query was present, which walks and
+    internally sorts the whole key column -- 61.9 million rows for the real
+    ``closest surface voxel`` table -- however few voxels were queried.
+    ``angle.find_closest_streamline`` queries exactly one.
+
+    Forbidding ``np.isin``/``np.in1d`` stands in for that O(rows) cost; a
+    timing assertion would say the same thing far less reliably. Membership now
+    comes from the ``np.searchsorted`` the helper already performs.
+    """
+    def forbidden(*args, **kwargs):
+        raise AssertionError(
+            "membership must come from the binary search, not a full-column scan")
+
+    monkeypatch.setattr(np, "isin", forbidden)
+    monkeypatch.setattr(np, "in1d", forbidden, raising=False)  # gone in numpy 2
+
+    sorter = np.argsort(lookup[:, 0], kind="stable") if with_sorter else None
+    result = _matching_voxel_indices(
+        np.array([10, 15, 40]), lookup, sorter=sorter, missing_value=-1)
+    assert np.array_equal(result, np.array([700, -1, 100]))

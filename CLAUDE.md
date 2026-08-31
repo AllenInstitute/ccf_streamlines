@@ -116,7 +116,12 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
   `_validate_inputs` but not their supported values.
 - `_matching_voxel_indices` (`projection.py:1345`) uses `np.searchsorted` with no `sorter`
   in most call sites, so the reference file's lookup column is assumed pre-sorted. Nothing
-  checks this; an unsorted reference file yields wrong voxels, not an error.
+  checks this; an unsorted reference file yields wrong answers, not an error. The same
+  binary search also decides whether a query matched at all, by comparing against the key
+  at the insertion point — do not reintroduce an `np.isin` membership test. It walks the
+  whole key column, 61.9M rows in `closest_surface_voxel_lookup.h5`, and
+  `angle.find_closest_streamline` calls the helper once per coordinate, so that cost is
+  paid per point (12.5 s each, measured).
 - The isocortex layer names have one definition, module-level `projection.ISOCORTEX_LAYER_KEYS`
   (issue #26). Both projector classes bind their `ISOCORTEX_LAYER_KEYS` class attribute to it
   and `metrics.LAYER_LABELS` zips it against `metrics.ISOCORTEX_LAYER_STRUCTURE_SET_IDS`, so

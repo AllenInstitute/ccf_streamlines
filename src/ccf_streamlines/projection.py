@@ -1356,16 +1356,29 @@ def _matching_voxel_indices(
     ref_ind=1,
     missing_value=0,
     sorter=None):
-    """ Finds matching (flattened) voxels in lookup. Missing values return `missing_value`."""
+    """ Finds matching (flattened) voxels in lookup. Missing values return `missing_value`.
+
+    The lookup column is assumed to be in increasing order, or in the order given by
+    `sorter` when one is supplied. Nothing here checks that.
+    """
+    lookup_keys = matching_voxel_lookup[:, lookup_ind]
+    n_rows = lookup_keys.shape[0]
     matching_voxel_ind = np.ones_like(voxel_inds, dtype=int) * missing_value
-    has_match = np.isin(voxel_inds, matching_voxel_lookup[:, lookup_ind])
-    lookup_results_ind = np.searchsorted(
-        matching_voxel_lookup[:, lookup_ind],
-        voxel_inds[has_match],
-        sorter=sorter
-    )
+    if n_rows == 0:
+        return matching_voxel_ind
+
+    # One binary search answers both questions. `np.searchsorted` returns the left-hand
+    # insertion point, so a query is present exactly when the key sitting there equals
+    # it - the same answer `np.isin` gave, and it keeps the same tie-breaking, but
+    # without `np.isin`'s full pass over (and internal sort of) the lookup column. That
+    # column runs to tens of millions of rows in the real reference files and was being
+    # rescanned on every call, including calls that look up a single voxel.
+    lookup_results_ind = np.searchsorted(lookup_keys, voxel_inds, sorter=sorter)
+    in_range = lookup_results_ind < n_rows
+    lookup_rows = np.where(in_range, lookup_results_ind, 0)
     if sorter is not None:
-        matching_voxel_ind[has_match] = matching_voxel_lookup[sorter, ref_ind][lookup_results_ind]
-    else:
-        matching_voxel_ind[has_match] = matching_voxel_lookup[lookup_results_ind, ref_ind]
+        lookup_rows = sorter[lookup_rows]
+    has_match = in_range & (lookup_keys[lookup_rows] == voxel_inds)
+
+    matching_voxel_ind[has_match] = matching_voxel_lookup[lookup_rows[has_match], ref_ind]
     return matching_voxel_ind
