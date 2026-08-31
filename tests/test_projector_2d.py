@@ -226,17 +226,23 @@ def test_right_hemisphere_flips_the_first_dimension(mini_ccf):
 
 
 def test_the_two_hemisphere_mirroring_conventions_differ_by_one_voxel(mini_ccf):
-    """Pinned characterization, not an assertion that either is correct.
+    """This class mirrors correctly; the coordinate projector does not.
 
     ``Isocortex2dProjector`` mirrors a volume with ``np.flip(volume, axis=2)``,
-    which maps voxel z to ``z_size - 1 - z``. ``IsocortexCoordinateProjector``
-    mirrors coordinates with ``z_size - z``. The two therefore disagree by one
-    voxel about which side of the midline a given voxel is on.
+    which maps voxel z to ``z_size - 1 - z``. That is the geometrically correct
+    mirror of a voxel about the midline plane: voxel z has centre z + 0.5, and
+    reflecting that about ``z_size / 2`` gives ``(z_size - 1 - z) + 0.5``, the
+    centre of voxel ``z_size - 1 - z``.
 
-    Which is intended is not knowable from the code or the documentation, so
-    this records the current behaviour rather than asserting a correct answer.
-    Overlaying projected coordinates on a projected volume is off by one voxel
-    laterally until it is resolved.
+    ``IsocortexCoordinateProjector`` reflects voxels with ``z_size - z``, one
+    voxel away -- and disagrees with its own micron reflection, which uses the
+    correct convention. See
+    ``tests/test_coordinate_projector.py`` under "reflection consistency".
+
+    Both classes take ``z_size`` from the same ``original shape`` attribute on
+    the same dataset, so this is a genuine one-voxel disagreement and not two
+    different volume shapes. This test holds the correct behaviour in place
+    here while the defect is pinned there.
     """
     z_size = mini_ccf.volume_shape[2]
     x, y, z = mini_ccf.path_voxels(0)[3]
