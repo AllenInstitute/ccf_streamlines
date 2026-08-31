@@ -51,7 +51,6 @@ def coordinate_projector(mini_ccf):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.xfail(strict=True, reason=PR13)
 def test_project_coordinates_survives_an_empty_nearest_streamline_search(
     mini_ccf, coordinate_projector
 ):
