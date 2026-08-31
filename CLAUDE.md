@@ -130,6 +130,14 @@ gated. `python-publish.yml` builds and publishes to PyPI on GitHub release.
   `z_size - 1 - z`, the volume projectors' `np.flip(volume, axis=2)` convention; the old
   `z_size - z` was one voxel out. One mask, taken from the coordinates, drives both — the
   two masks used to disagree throughout the midline voxel.
+- `angle.find_closest_streamline` mirrors the same way, but with the plain `z_size - 1 - z`
+  in both directions (issue #33) — the query voxel onto the left, and the streamline back
+  onto the right. Both ends are voxel-to-voxel there, so the plain formula round-trips
+  exactly and the coordinate-derived form of #27 is not needed; it would in fact be worse,
+  returning a streamline from the neighbouring voxel for a query on a voxel boundary. Its
+  midline test is `voxel[2] > (z_size - 1) / 2`, not `> z_size / 2`: for an even `z_size`
+  the first right-hand voxel is `z_size / 2` itself, and the old test left it unreflected
+  and so absent from the left-only reference, which reported it as outside isocortex.
 - `metrics.measure_streamline_layer_thicknesses` re-implements path deduplication inline
   with a Python loop instead of calling `processing.remove_duplicate_voxels_from_paths`,
   which is vectorized and has zero callers in the repo. The layer-sorting hack right below

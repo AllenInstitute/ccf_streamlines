@@ -154,11 +154,18 @@ def test_a_coordinate_outside_cortex_returns_an_empty_array(mini_ccf, caplog):
 
 def test_a_right_hemisphere_coordinate_comes_back_on_the_right(mini_ccf):
     """Reference data exists only on the left, so the lookup reflects, then
-    reflects the answer back."""
+    reflects the answer back.
+
+    Both reflections are ``z_size - 1 - z``, the ``np.flip(volume, axis=2)``
+    convention of the volume projectors, so they are exact inverses. They used
+    to be ``z_size - z`` -- self-inverse too, which is why the streamline came
+    back on the right hemisphere and the defect went unseen, but one voxel out,
+    so the streamline was the *neighbouring* voxel's (issue #33).
+    """
     z_size = mini_ccf.volume_shape[2]
     left_voxel = mini_ccf.path_voxels(0)[3]
     right_voxel = left_voxel.copy()
-    right_voxel[2] = z_size - left_voxel[2]
+    right_voxel[2] = z_size - 1 - left_voxel[2]
     coord = right_voxel * np.array(mini_ccf.resolution)
 
     result = find_closest_streamline(
@@ -170,8 +177,79 @@ def test_a_right_hemisphere_coordinate_comes_back_on_the_right(mini_ccf):
     )
 
     expected = mini_ccf.path_voxels(0).copy()
-    expected[:, 2] = z_size - expected[:, 2]
+    expected[:, 2] = z_size - 1 - expected[:, 2]
     assert np.array_equal(result, expected * np.array(mini_ccf.resolution))
+
+
+@pytest.mark.parametrize("frac", [0.01, 0.25, 0.5, 0.75, 0.99])
+def test_mirror_image_queries_return_mirror_image_streamlines(mini_ccf, frac):
+    """The invariant the hemisphere reflection exists to preserve.
+
+    ``u`` and ``z_size * resolution - u`` are the same point reflected about
+    the midline, so they must find the same streamline, mirrored. Checked at
+    several positions inside the voxel: a mirrored interior point is an
+    interior point of the mirrored voxel, whichever offset it sits at.
+
+    Under the superseded ``z_size - z`` this returned the neighbouring
+    streamline -- against the real atlas, a different streamline entirely for
+    two thirds of the voxels sampled.
+    """
+    z_size = mini_ccf.volume_shape[2]
+    res = np.array(mini_ccf.resolution, dtype=float)
+    x, y, _ = mini_ccf.path_voxels(0)[3]
+
+    for z_left in sorted({int(v) for v in mini_ccf.path_starts[:, 2]}):
+        left = (np.array([x, y, z_left]) + frac) * res
+        right = left.copy()
+        right[2] = z_size * res[2] - left[2]
+
+        kw = dict(
+            resolution=mini_ccf.resolution, volume_shape=mini_ccf.volume_shape
+        )
+        from_left = find_closest_streamline(
+            left, mini_ccf.closest_surface_voxel_file,
+            mini_ccf.surface_paths_file, **kw,
+        )
+        from_right = find_closest_streamline(
+            right, mini_ccf.closest_surface_voxel_file,
+            mini_ccf.surface_paths_file, **kw,
+        )
+
+        assert from_left.size > 0, f"the left-hand control must find a streamline (z={z_left})"
+        mirrored = from_left.copy()
+        mirrored[:, 2] = (z_size - 1) * res[2] - from_left[:, 2]
+        assert np.array_equal(from_right, mirrored), f"z={z_left}"
+
+
+def test_the_plane_just_right_of_the_midline_is_reflected(mini_ccf_factory):
+    """Voxel ``z_size / 2`` is the first right-hand plane and must reflect.
+
+    The reference covers the left hemisphere only, so a voxel that is not
+    reflected is looked up in data that cannot contain it and comes back as
+    "not within isocortex" -- for a point that is squarely in cortex. The test
+    used to be ``voxel[2] > z_size / 2``, which is false for voxel
+    ``z_size / 2`` itself (issue #33).
+
+    Needs a streamline against the midline, so that the plane's mirror is
+    inside the reference at all.
+    """
+    mini_ccf = mini_ccf_factory(z_positions=(1, 2, 3), extra_z_positions=(4, 5))
+    z_size = mini_ccf.volume_shape[2]
+    first_right = z_size // 2
+    assert z_size - 1 - first_right == 5, "the mirror must be the midline-adjacent streamline"
+
+    x, y, _ = mini_ccf.path_voxels(0)[3]
+    coord = (np.array([x, y, first_right]) + 0.5) * np.array(mini_ccf.resolution)
+
+    result = find_closest_streamline(
+        coord,
+        mini_ccf.closest_surface_voxel_file,
+        mini_ccf.surface_paths_file,
+        resolution=mini_ccf.resolution,
+        volume_shape=mini_ccf.volume_shape,
+    )
+
+    assert result.size > 0
 
 
 def test_a_coordinate_may_be_given_as_a_flat_triple(mini_ccf):

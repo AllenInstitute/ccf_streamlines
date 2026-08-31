@@ -340,3 +340,61 @@ def test_a_real_projection_runs_through_the_public_interface(
     assert result.shape == tuple(projector.view_size)
     row, col = np.unravel_index(int(projector.view_lookup[0, 0]), projector.view_size)
     assert result[row, col] == 200
+
+
+def test_mirrored_queries_find_mirrored_streamlines(surface_paths, closest_surface_voxels):
+    """`find_closest_streamline` on real streamlines, which actually differ.
+
+    The mini-CCF's streamlines all run straight down +y and are identical from
+    one lateral position to the next, so an off-by-one in the hemisphere
+    reflection returns a neighbouring streamline that *looks* the same. Only
+    real streamlines, which curve differently at every position, can show that
+    the wrong one came back -- under the superseded `z_size - z` two thirds of
+    the voxels sampled here returned a streamline of a different length
+    (issue #33).
+    """
+    import h5py as _h5py
+
+    from ccf_streamlines.angle import find_closest_streamline
+
+    shape = (1320, 800, 1140)
+    z_size = shape[2]
+    resolution = (10, 10, 10)
+
+    with _h5py.File(surface_paths, "r") as f:
+        sample = f["paths"][::30000, :]
+    with _h5py.File(closest_surface_voxels, "r") as f:
+        reference = f["closest surface voxel"][:]
+
+    # Voxels partway down a streamline, on the left, where the reference lives.
+    left_voxels = []
+    for row in sample:
+        valid = row[row > 0]
+        if len(valid) > 5:
+            voxel = np.unravel_index(valid[len(valid) // 2], shape)
+            if voxel[2] < z_size // 2:
+                left_voxels.append(voxel)
+    # Three is enough: each call scans the whole 62M-row reference through
+    # `_matching_voxel_indices`, so they cost seconds apiece.
+    left_voxels = left_voxels[:3]
+    assert left_voxels, "no left-hemisphere in-cortex voxels sampled"
+
+    for voxel in left_voxels:
+        left = (np.array(voxel) + 0.5) * np.array(resolution, dtype=float)
+        right = left.copy()
+        right[2] = z_size * resolution[2] - left[2]
+
+        from_left = find_closest_streamline(
+            left, reference, str(surface_paths),
+            resolution=resolution, volume_shape=shape,
+        )
+        from_right = find_closest_streamline(
+            right, reference, str(surface_paths),
+            resolution=resolution, volume_shape=shape,
+        )
+
+        assert from_left.size > 0, f"the left-hand control must be in cortex ({voxel})"
+        mirrored = from_left.copy()
+        mirrored[:, 2] = (z_size - 1) * resolution[2] - from_left[:, 2]
+        assert from_right.shape == mirrored.shape, f"different streamline ({voxel})"
+        assert np.array_equal(from_right, mirrored), f"{voxel}"
