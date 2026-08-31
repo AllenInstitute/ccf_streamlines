@@ -10,13 +10,6 @@ import pytest
 
 from ccf_streamlines.projection import IsocortexCoordinateProjector
 
-NO_PROJECTION_FILE = (
-    "AllenInstitute/ccf_streamlines#24: constructing without `projection_file` and then calling "
-    "`project_coordinates` raises AttributeError deep inside "
-    "`_calculate_2d_coordinates` instead of a clear error at the call; remove "
-    "this marker when it is fixed"
-)
-
 
 def _projector(mini_ccf, **kwargs):
     kwargs.setdefault("projection_file", mini_ccf.view_lookup_file)
@@ -428,7 +421,6 @@ def test_layer_thicknesses_are_optional_when_not_used(mini_ccf):
     assert projector.path_layer_thickness is None
 
 
-@pytest.mark.xfail(strict=True, reason=NO_PROJECTION_FILE)
 def test_projecting_without_a_projection_file_raises_a_clear_error(mini_ccf):
     """Currently an AttributeError about a missing `view_lookup` attribute,
     raised from inside a private method -- not something a caller can act on."""

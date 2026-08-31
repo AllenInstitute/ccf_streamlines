@@ -782,7 +782,11 @@ class IsocortexCoordinateProjector:
             with h5py.File(projection_file, "r") as proj_f:
                 self.view_lookup = proj_f["view lookup"][:]
                 self.view_size = proj_f.attrs["view size"][:]
-
+        else:
+            # Documented: without a projection file only depth information is
+            # available. `project_coordinates` checks these and says so.
+            self.view_lookup = None
+            self.view_size = None
 
         self.resolution = resolution
 
@@ -844,6 +848,12 @@ class IsocortexCoordinateProjector:
         projected_coords : (N, 3) array
             3D flattened projected coordinates
         """
+        if self.view_lookup is None:
+            raise ValueError(
+                "`project_coordinates` requires a `projection_file`, which was "
+                "not given when this projector was constructed; without one, "
+                "only `project_depths` is available"
+            )
         if scale not in {"voxels", "microns"}:
             raise ValueError(f"`scale` must be either 'voxels' or 'microns'; was {scale}")
         if hemisphere not in {"both", "both_mirrored", "right", "left"}:
