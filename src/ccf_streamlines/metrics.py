@@ -5,6 +5,24 @@ import h5py
 import logging
 from tqdm import tqdm
 
+from ccf_streamlines.projection import ISOCORTEX_LAYER_KEYS
+
+
+# Structure set IDs from the mouse ontology, in the same pia-to-white-matter
+# order as ISOCORTEX_LAYER_KEYS. The names come from that one list so a
+# thickness file written here is always keyed the way the projector classes
+# read it back.
+ISOCORTEX_LAYER_STRUCTURE_SET_IDS = [
+    667481440,
+    667481441,
+    667481445,
+    667481446,
+    667481449,
+    667481450,
+]
+
+LAYER_LABELS = dict(zip(ISOCORTEX_LAYER_STRUCTURE_SET_IDS, ISOCORTEX_LAYER_KEYS))
+
 
 def measure_streamline_layer_thicknesses(layer_volume, paths, resolution):
     """ Measure the start, end, and thickness of layers
@@ -23,16 +41,6 @@ def measure_streamline_layer_thicknesses(layer_volume, paths, resolution):
     thicknesses : dict
         Dictionary keyed on layers with start, end, and thickness of layers
     """
-
-    # Structure set IDs from mouse ontology
-    LAYER_LABELS = {
-        667481440: 'Isocortex layer 1',
-        667481441: 'Isocortex layer 2/3',
-        667481445: 'Isocortex layer 4',
-        667481446: 'Isocortex layer 5',
-        667481449: 'Isocortex layer 6a',
-        667481450: 'Isocortex layer 6b',
-    }
 
     # Remove duplicate consecutive voxels from paths
     fixed_paths = np.zeros_like(paths)

@@ -19,6 +19,21 @@ HEMISPHERE_SPACE_VIEW_LOOKUP = {
     "rotated": 390,
 }
 
+#: Isocortex layer names, in pia-to-white-matter order.
+#:
+#: These are the keys of a streamline layer thickness file, so
+#: `ccf_streamlines.metrics.measure_streamline_layer_thicknesses`, which writes
+#: one, and the projector classes below, which read one back, must agree on
+#: them exactly. They share this list rather than repeating it.
+ISOCORTEX_LAYER_KEYS = [
+    'Isocortex layer 1',
+    'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
+    'Isocortex layer 4',
+    'Isocortex layer 5',
+    'Isocortex layer 6a',
+    'Isocortex layer 6b'
+]
+
 
 class Isocortex2dProjector:
     """ 2D projection of common cortical framework volumes
@@ -271,14 +286,9 @@ class Isocortex3dProjector(Isocortex2dProjector):
         Number of entries read from the volume lookup at a time while ordering
         the paths to match the view.
     """
-    ISOCORTEX_LAYER_KEYS = [
-        'Isocortex layer 1',
-        'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
-        'Isocortex layer 4',
-        'Isocortex layer 5',
-        'Isocortex layer 6a',
-        'Isocortex layer 6b'
-    ]
+    #: The module-level list, kept as a class attribute for callers that
+    #: reach for it there.
+    ISOCORTEX_LAYER_KEYS = ISOCORTEX_LAYER_KEYS
 
     def __init__(self,
         projection_file,
@@ -739,14 +749,9 @@ class IsocortexCoordinateProjector:
         down; the default is suitable for the full-size reference files.
     """
 
-    ISOCORTEX_LAYER_KEYS = [
-        'Isocortex layer 1',
-        'Isocortex layer 2/3', # hilariously, this goes into a group in the h5 file
-        'Isocortex layer 4',
-        'Isocortex layer 5',
-        'Isocortex layer 6a',
-        'Isocortex layer 6b'
-    ]
+    #: The module-level list, kept as a class attribute for callers that
+    #: reach for it there.
+    ISOCORTEX_LAYER_KEYS = ISOCORTEX_LAYER_KEYS
 
     def __init__(self,
         surface_paths_file,
