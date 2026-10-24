@@ -20,20 +20,11 @@ network access, no database, no state outside the caller's arrays.
     uv run ruff format .          # format
 
 Ruff is the only lint/format tool; its configuration is the `[tool.ruff]` block in
-`pyproject.toml` (`select = E, W, F, I, UP, B, C4`, `target-version = "py39"`, `E501`
-left to the formatter). There is no typecheck configuration, and `src/` carries no type
+`pyproject.toml`. There is no typecheck configuration, and `src/` carries no type
 annotations, so do not add a typechecker piecemeal.
-`.github/workflows/tests.yml` gates pull requests across x86-64 and ARM64 on Python
-3.9 and 3.13; the architecture dimension is load-bearing, since the tied-view-lookup
-defect exists only as a divergence between architectures. Coverage is reported, not
-gated. Its second job, `lint`, runs `ruff check` and `ruff format --check` once on
-x86-64 — findings are a property of the source, not the machine — installing only the
-dev group so the scientific stack is skipped. `python-publish.yml` builds and publishes
-to PyPI on GitHub release.
 
 ## Layout
 
-- `src/ccf_streamlines/` — the entire package; src-layout, built by `uv_build` (`pyproject.toml`).
 - `tests/` — pytest, no data files needed. Tests marked `xfail` are pinned to an open
   bug or an open PR and assert the *correct* behaviour, so `xfail_strict` reports an
   unexpected pass when one is fixed — that is the signal to delete the marker.
@@ -74,18 +65,11 @@ to PyPI on GitHub release.
 
 ## How a 2D projection runs
 
-1. `Isocortex2dProjector.__init__` reads `view lookup`, `view size`, `spacing` from the
-   projection file, then `_load_and_sort_paths` reorders `paths` to match the view. That
-   reorder reads `volume lookup flat` in chunks — deliberately, to keep memory down
-   (commit ef0cd04). The size is the `chunk_size` constructor argument, default 1000;
-   the same chunking is repeated in `IsocortexCoordinateProjector._path_lookup_chunked`.
-2. `project_volume(volume, kind)` dispatches on `self.hemisphere`. For `"right"` and
-   `"both"` it re-projects `np.flip(volume, axis=2)` and flips the result back.
-3. `_project_volume_to_view` does the actual reduction: `volume.flat[self.paths].max(axis=1)`
-   scattered into `projected_volume.flat[self.view_lookup[:, 0]]`.
-4. `view_space_for_other_hemisphere` trims `n` columns off the right edge before the two
-   hemispheres are concatenated; `HEMISPHERE_SPACE_VIEW_LOOKUP` (`projection.py:14`) holds
-   the per-view presets (e.g. `flatmap_butterfly: 184`).
+`Isocortex2dProjector.__init__` reads `view lookup`, `view size`, `spacing` from the
+projection file, then `_load_and_sort_paths` reorders `paths` to match the view. That
+reorder reads `volume lookup flat` in chunks — deliberately, to keep memory down
+(commit ef0cd04). The size is the `chunk_size` constructor argument, default 1000;
+the same chunking is repeated in `IsocortexCoordinateProjector._path_lookup_chunked`.
 
 ## Conventions
 
