@@ -22,7 +22,7 @@ or projections you try to use at once, etc.
 Installation
 ------------
 
-``ccf_streamlines`` is published on PyPI and requires Python 3.9 or newer.
+``ccf_streamlines`` is published on PyPI and requires Python 3.11 or newer.
 
 .. code:: bash
 

@@ -34,7 +34,7 @@ def _straight_path(x, z, layer_ids, padded_length=8):
     """
     volume = np.zeros(SHAPE, dtype=np.int64)
     ys = np.arange(1, 1 + len(layer_ids))
-    for y, layer in zip(ys, layer_ids):
+    for y, layer in zip(ys, layer_ids, strict=True):
         volume[x, y, z] = layer
     flat = np.ravel_multi_index((np.full_like(ys, x), ys, np.full_like(ys, z)), SHAPE)
     row = np.zeros(padded_length, dtype=np.int64)

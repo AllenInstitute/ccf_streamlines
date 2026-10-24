@@ -3,7 +3,7 @@ name = "ccf-streamlines"
 version = "1.2.0"
 description = "Projection of Allen CCF data via streamlines"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 classifiers = [
     "Programming Language :: Python :: 3",
 ]
@@ -11,6 +11,9 @@ dependencies = [
     "h5py>=2.10",
     "numpy",
     "pandas",
+    # Not imported directly (it arrives via scikit-image); listed to hold a
+    # security floor for installs of this package, not just for uv.lock.
+    "pillow>=13.0",
     "pynrrd",
     "scikit-image",
     "scipy",
@@ -41,9 +44,9 @@ testpaths = ["tests"]
 xfail_strict = true
 
 [tool.ruff]
-# The package supports 3.9, so the linter must not suggest syntax newer than that
+# The package supports 3.11, so the linter must not suggest syntax newer than that
 # even when it is run under a newer interpreter.
-target-version = "py39"
+target-version = "py311"
 # Claude Code puts its git worktrees under .claude/worktrees/, each a full copy
 # of this repo at whatever commit it was cut from. Ruff has no reason to walk
 # into them: they are separate checkouts that lint themselves against their own
