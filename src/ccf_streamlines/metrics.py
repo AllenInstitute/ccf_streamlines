@@ -15,7 +15,9 @@ ISOCORTEX_LAYER_STRUCTURE_SET_IDS = [
     667481450,
 ]
 
-LAYER_LABELS = dict(zip(ISOCORTEX_LAYER_STRUCTURE_SET_IDS, ISOCORTEX_LAYER_KEYS))
+LAYER_LABELS = dict(
+    zip(ISOCORTEX_LAYER_STRUCTURE_SET_IDS, ISOCORTEX_LAYER_KEYS, strict=True)
+)
 
 
 def measure_streamline_layer_thicknesses(layer_volume, paths, resolution):

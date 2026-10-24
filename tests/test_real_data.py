@@ -275,7 +275,7 @@ def test_tied_rows_are_in_increasing_view_index_order(real_data_dir, view):
     ends = np.r_[starts[1:], len(ordered)]
 
     violations = 0
-    for a, b in zip(starts, ends):
+    for a, b in zip(starts, ends, strict=True):
         if b - a > 1 and not np.all(np.diff(ordered[a:b, 0].astype(np.int64)) > 0):
             violations += 1
     assert violations == 0

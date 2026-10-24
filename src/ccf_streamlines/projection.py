@@ -1250,7 +1250,7 @@ class IsocortexCoordinateProjector:
         rot_paths_cache = {}
         path_starts_cache = {}
         for c, path_idx in zip(
-            coords[projected_ind != -1, :], path_inds[projected_ind != -1]
+            coords[projected_ind != -1, :], path_inds[projected_ind != -1], strict=True
         ):
             if (
                 path_idx not in rot_cache

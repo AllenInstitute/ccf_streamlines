@@ -411,7 +411,7 @@ def _check_invariants(mini, flat_lookup, closest):
     boundaries = np.flatnonzero(np.r_[True, np.diff(s[:, 1]) != 0])
     ends = np.r_[boundaries[1:], len(s)]
     n_tied = 0
-    for a, b in zip(boundaries, ends):
+    for a, b in zip(boundaries, ends, strict=True):
         if b - a > 1:
             n_tied += 1
             if not np.all(np.diff(s[a:b, 0].astype(np.int64)) > 0):

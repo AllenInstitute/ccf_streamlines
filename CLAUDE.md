@@ -12,7 +12,7 @@ network access, no database, no state outside the caller's arrays.
 
 ## Commands
 
-    uv sync                       # install; requires-python >=3.9
+    uv sync                       # install; requires-python >=3.11
     uv run pytest                 # whole suite; seconds, no data files needed
     CCF_STREAMLINES_TEST_DATA=... uv run pytest -m real_data   # opt-in tier, real assets
     cd docs && make html          # Sphinx docs -> docs/build (needs docs/requirements.txt: sphinx 9.1.0)
@@ -146,8 +146,8 @@ the same chunking is repeated in `IsocortexCoordinateProjector._path_lookup_chun
   with a Python loop instead of calling `processing.remove_duplicate_voxels_from_paths`,
   which is vectorized and has zero callers in the repo. The layer-sorting hack right below
   it is flagged as such in its own comment (`metrics.py:76`).
-- `.python-version` (pinning 3.9) is **gitignored**, so a fresh clone is not pinned — `uv sync`
-  there resolves to whatever interpreter uv finds (3.13 in this checkout). Nothing tests 3.9.
+- `.python-version` is **gitignored**, so a fresh clone is not pinned — `uv sync` there
+  resolves to whatever interpreter uv finds that satisfies `>=3.11`. CI tests 3.11 and 3.13.
 - `tests/test_real_data.py` imports from `tests.mini_ccf` *after* a
   `pytest.importorskip("h5py")`, so the import carries a `# noqa: E402`. It is the only
   suppression in the repo; the rest of the tree is clean under the configured rules.
